@@ -2,8 +2,8 @@
 // Created by amit on 7/12/22.
 //
 
-#ifndef GENERIC_PYTORCH_GENERIC_PYTORCH_H
-#define GENERIC_PYTORCH_GENERIC_PYTORCH_H
+#ifndef TORCH_ML_MODEL_H
+#define TORCH_ML_MODEL_H
 
 #include "KIM_ModelDriverHeaders.hpp"
 
@@ -16,11 +16,12 @@ int model_driver_create(KIM::ModelDriverCreate * const modelDriverCreate,
                         KIM::TimeUnit const requestedTimeUnit);
 }
 
-class TorchMLModelImplementation;
+//class TorchMLModelImplementation;
 
 class TorchMLModel
 {
  public:
+    double m, c, inflDist;
   TorchMLModel(KIM::ModelDriverCreate * const modelDriverCreate,
                   KIM::LengthUnit const requestedLengthUnit,
                   KIM::EnergyUnit const requestedEnergyUnit,
@@ -28,7 +29,7 @@ class TorchMLModel
                   KIM::TemperatureUnit const requestedTemperatureUnit,
                   KIM::TimeUnit const requestedTimeUnit,
                   int * const ier);
-  ~TorchMLModel();
+//  ~TorchMLModel();
 
   // no need to make these "extern" since KIM will only access them
   // via function pointers.  "static" is required so that there is not
@@ -45,8 +46,8 @@ class TorchMLModel
       KIM::ModelCompute const * const modelCompute,
       KIM::ModelComputeArgumentsDestroy * const modelComputeArgumentsDestroy);
 
- private:
-  TorchMLModelImplementation * implementation_;
+// private:
+//  TorchMLModelImplementation * implementation_;
 };
 
-#endif //GENERIC_PYTORCH_GENERIC_PYTORCH_H
+#endif //TORCH_ML_MODEL_H

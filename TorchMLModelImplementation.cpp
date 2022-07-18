@@ -6,7 +6,7 @@
 #include <string>
 
 #include "KIM_ModelDriverHeaders.hpp"
-#include "TorchMLModel.hpp"
+#include "TorchMLModelDriver.hpp"
 #include "TorchMLModelImplementation.hpp"
 
 #define MAXLINE 1024

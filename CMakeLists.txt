@@ -9,7 +9,7 @@ list(APPEND CMAKE_PREFIX_PATH $ENV{KIM_API_CMAKE_PREFIX_DIR})
 find_package(KIM-API-ITEMS 2.2 REQUIRED CONFIG)
 
 kim_api_items_setup_before_project(ITEM_TYPE "modelDriver")
-project(TorchMLDriver LANGUAGES CXX)
+project(TorchMLModelDriver LANGUAGES CXX)
 kim_api_items_setup_after_project(ITEM_TYPE "modelDriver")
 
 # This model driver requires C++11
@@ -26,8 +26,8 @@ add_kim_api_model_driver_library(
 #add_subdirectory(MLModel)
 
 target_sources(${PROJECT_NAME} PRIVATE
-        TorchMLModel.cpp
-        ml_model.cpp
+        TorchMLModelDriver.cpp
+        MLModel.cpp
 #        TorchMLModelImplementation.cpp
 )
 

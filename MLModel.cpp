@@ -1,7 +1,7 @@
 #include <map>
 #include <string>
 #include <iostream>
-#include "ml_model.hpp"
+#include "MLModel.hpp"
 
 #include <torch/script.h>
 
@@ -152,7 +152,6 @@ PytorchModel::PytorchModel(const char *model_file_path, const char *device_name)
         throw;
     }
 
-    std::cout << "Creating ML model" <<"\n";
     // Check if model contain descriptor information
     for (auto named_variable: module_.named_attributes()) {
         if (named_variable.name == "descriptor") {

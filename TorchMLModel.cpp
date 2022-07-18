@@ -1,6 +1,6 @@
 #include "TorchMLModel.hpp"
 //#include "TorchMLModelImplementation.hpp"
-#include <cstddef>
+//#include <cstddef>
 #include <iostream>
 #include "KIM_LogMacros.hpp"
 #include <fstream>
@@ -9,6 +9,8 @@
 
 #define MAX_FILE_NUM 2
 typedef double VecOfSize3[3];
+#define KIM_DEVICE_ENV_VAR "KIM_MODEL_EXECUTION_DEVICE"
+
 
 
 //==============================================================================
@@ -73,14 +75,15 @@ TorchMLModel::TorchMLModel(
     int * const ier)
 {
     *ier = false;
+
     // Read parameter files from model driver ---------------------------------------
     int numberParameterFiles;
     modelDriverCreate->GetNumberOfParameterFiles(&numberParameterFiles);
-    std::string const * paramFileName;
+    std::string const * paramFileName, * tmpFileName;
     std::string const * paramDirectory;
+    std::string const * modelFileName;
 
-    // Model = y = mx +c
-
+    // Only 2 files expected .param and .pt
     std::cout<<"Param files count: " << numberParameterFiles <<"\n";
     if (numberParameterFiles > MAX_FILE_NUM){
         *ier = true;
@@ -88,16 +91,86 @@ TorchMLModel::TorchMLModel(
         return;
     }
 
-    modelDriverCreate->GetParameterFileBasename(0,&paramFileName);
+    for (int i = 0; i < numberParameterFiles; i++){
+        modelDriverCreate->GetParameterFileBasename(i,&tmpFileName);
+        if (tmpFileName->substr(tmpFileName->size() - 5) == "param"){
+            paramFileName = tmpFileName;
+        }
+        else if (tmpFileName->substr(tmpFileName->size() - 2) == "pt"){
+            modelFileName = tmpFileName;
+        } else {
+            LOG_ERROR("File extensions do not match; only expected .param or .pt");
+            *ier = true;
+            return;
+        }
+    }
+
+    // Get param directory to load model and parameters from
     modelDriverCreate->GetParameterFileDirectoryName(&paramDirectory);
 
-    std::cout<<*paramFileName <<"\n";
-    std::cout<<*paramDirectory <<"\n";
+    auto fullyQualifiedParamFileName = *paramDirectory + "/" + *paramFileName;
+    auto fullyQualifiedModelName = *paramDirectory + "/" + *modelFileName;
+    std::ifstream filePtr(fullyQualifiedParamFileName);
+    std::string dummyStr;
+    if (filePtr.is_open()){
+        // TODO better structured input block. YAML?
+        // Comments if needed
+        do {
+            std::getline(filePtr, dummyStr);
+        } while (dummyStr[0] == '#');
+        n_elements = std::stoi(dummyStr);
+        std::getline(filePtr, dummyStr);
+        int pos;
+        for (int i = 0; i < n_elements ; i++){
+            pos = dummyStr.find(" ");
+            elements_list.push_back(dummyStr.substr(0,pos));
+            if (pos == std::string::npos){
+                if (i + 1 != n_elements){
+                    LOG_ERROR("Incorrect formatting OR number of elements");
+                }
+                LOG_INFORMATION("Number of elements read: " + std::to_string(i+1));
+            } else {
+                dummyStr.erase(0,pos + 1);
+            }
+        }
+        // blank line
+        std::getline(filePtr, dummyStr);
+        // Ignore comments
+        do {
+            std::getline(filePtr, dummyStr);
+        } while (dummyStr[0] == '#');
 
-    auto filename = *paramDirectory + "/" + *paramFileName;
-    std::ifstream filePtr(filename);
-    filePtr >> m;filePtr >> c;
+        preprocessing = dummyStr;
+        std::cout << n_elements << preprocessing<<"\n";
+
+        // blank line
+        std::getline(filePtr, dummyStr);
+        // Ignore comments
+        do {
+            std::getline(filePtr, dummyStr);
+        } while (dummyStr[0] == '#');
+
+        model_name =  dummyStr;
+        std::cout << model_name<<"\n";
+    } else {
+        LOG_ERROR("Param file not found");
+        *ier = true;
+        return;
+    }
     filePtr.close();
+    LOG_INFORMATION("Successfully parsed parameter file");
+    if (*modelFileName != model_name){
+        LOG_ERROR("Provided model file name different from present model file.");
+        *ier = false;
+        return;
+    }
+    std::cout <<"read files\n";
+
+    // Load Torch Model ----------------------------------------------------------------
+    TorchModel = MLModel::create(fullyQualifiedModelName.c_str(),
+                                 ML_MODEL_PYTORCH,
+                                 std::getenv(KIM_DEVICE_ENV_VAR));
+    LOG_INFORMATION("Loaded Torch model and set to eval");
 
     // Unit conversions -----------------------------------------------------------------
     KIM::LengthUnit fromLength = KIM::LENGTH_UNIT::A;
@@ -145,18 +218,19 @@ TorchMLModel::TorchMLModel(
                                                &modelWillNotRequestNeighborsOfNoncontributingParticles_);
 
     // Species code --------------------------------------------------------------------
-    int numberOfSpecies = 1;
-    std::string species = "Si";
-    KIM::SpeciesName const specName1(species);
+    for (auto species : elements_list) {
+        KIM::SpeciesName const specName1(species);
 
-    //    std::map<KIM::SpeciesName const, int, KIM::SPECIES_NAME::Comparator> modelSpeciesMap;
-    //    std::vector<KIM::SpeciesName> speciesNameVector;
-    //
-    //    speciesNameVector.push_back(species);
-    //    // check for new species
-    //    std::map<KIM::SpeciesName const, int, KIM::SPECIES_NAME::Comparator>::const_iterator iIter = modelSpeciesMap.find(specName1);
-    // all of the above is to remove species duplicates
-    *ier = modelDriverCreate->SetSpeciesCode(specName1, 0);
+        //    std::map<KIM::SpeciesName const, int, KIM::SPECIES_NAME::Comparator> modelSpeciesMap;
+        //    std::vector<KIM::SpeciesName> speciesNameVector;
+        //
+        //    speciesNameVector.push_back(species);
+        //    // check for new species
+        //    std::map<KIM::SpeciesName const, int, KIM::SPECIES_NAME::Comparator>::const_iterator iIter = modelSpeciesMap.find(specName1);
+        // all of the above is to remove species duplicates
+        *ier = modelDriverCreate->SetSpeciesCode(specName1, 0);
+        if (*ier) return;
+    }
 
     // Register Index settings-----------------------------------------------------------
     modelDriverCreate->SetModelNumbering(KIM::NUMBERING::zeroBased);
@@ -165,10 +239,11 @@ TorchMLModel::TorchMLModel(
     // Register Parameters --------------------------------------------------------------
     // Currently trying to create a simple Linear Model with two parameters from param file
     //Extent = number of entries in parameter pointer
-    *ier = modelDriverCreate->SetParameterPointer(1,&m, "m", "slope");
+    // All model parameters are inside model So nothing to do here?
+    *ier = modelDriverCreate->SetParameterPointer(1,&n_elements, "n_elements", "slope");
     if (*ier) { LOG_ERROR("parameter m"); return;}
-    *ier = modelDriverCreate->SetParameterPointer(1,&c, "c", "slope");
-    if (*ier) { LOG_ERROR("parameter c"); return;}
+//    *ier = modelDriverCreate->SetParameterPointer(1,&c, "c", "slope");
+//    if (*ier) { LOG_ERROR("parameter c"); return;}
     std::cout << "parameters done\n";
 
     // register funciton pointers -----------------------------------------------------------
@@ -244,8 +319,8 @@ int TorchMLModel::Destroy(KIM::ModelDestroy * const modelDestroy)
 int TorchMLModel::Refresh(KIM::ModelRefresh * const modelRefresh){
     TorchMLModel * modelObject;
     modelRefresh->GetModelBufferPointer(reinterpret_cast<void **>(&modelObject));
-    modelObject->m = 0.0;
-    modelObject->c = 0.0;
+//    modelObject->m = 0.0;
+//    modelObject->c = 0.0;
     return false;
 }
 
@@ -258,35 +333,60 @@ int TorchMLModel::Compute(
     TorchMLModel * modelObject;
     modelCompute->GetModelBufferPointer(reinterpret_cast<void **>(&modelObject));
 
-    auto m_ = modelObject->m;
-    auto c_ = modelObject->c;
+//    auto m_ = modelObject->m;
+//    auto c_ = modelObject->c;
 
-    int const * numberOfParticles;
+    int const * numberOfParticlesPointer;
+    int *particleSpeciesCodes; // FIXME: Implement species code handling
+    int *particleContributing = NULL;
     double * forces = NULL;
     double * coordinates = NULL;
     VecOfSize3 * coordinates3;
-    double * energy;
+    double * energy = NULL;
+    std::vector<int> num_neighbors_;
+    std::vector<int> neighbor_list;
+    int numOfNeighbors;
+    int const *neighbors;
 
-
-//    int ier = 22;
     auto ier = modelComputeArguments->GetArgumentPointer(
             KIM::COMPUTE_ARGUMENT_NAME::numberOfParticles,
-            &numberOfParticles);
-    ier = modelComputeArguments->GetArgumentPointer(
+            &numberOfParticlesPointer)
+            || modelComputeArguments->GetArgumentPointer(
+            KIM::COMPUTE_ARGUMENT_NAME::particleSpeciesCodes,
+            &particleSpeciesCodes)
+            || modelComputeArguments->GetArgumentPointer(
+            KIM::COMPUTE_ARGUMENT_NAME::particleContributing,
+            &particleContributing)
+            || modelComputeArguments->GetArgumentPointer(
             KIM::COMPUTE_ARGUMENT_NAME::coordinates,
-            &coordinates);
-    ier = modelComputeArguments->GetArgumentPointer(
+            (double const **) &coordinates)
+            || modelComputeArguments->GetArgumentPointer(
             KIM::COMPUTE_ARGUMENT_NAME::partialForces,
-            &forces);
-    ier = modelComputeArguments->GetArgumentPointer(
+            (double const **) &forces)
+            || modelComputeArguments->GetArgumentPointer(
             KIM::COMPUTE_ARGUMENT_NAME::partialEnergy,
             &energy);
 
-    coordinates3 = (VecOfSize3 *) coordinates;
+    int const numberOfParticles = *numberOfParticlesPointer;
 
-    std::cout << *coordinates << "   " << *(coordinates + 2) << "   " << *(coordinates + 5) << "\n";
-    std::cout << coordinates3[0][0] << "   " << coordinates3[0][2] << "   " << coordinates3[1][2] << "\n";
-    *energy = m_ + c_;
+    modelObject->TorchModel->SetInputNode(0, particleContributing, numberOfParticles);
+    modelObject->TorchModel->SetInputNode(1, coordinates, 3 * numberOfParticles, true);
+
+    for (int i = 0; i< numberOfParticles; i++){
+        modelComputeArguments->GetNeighborList(0,
+                                               i,
+                                               &numOfNeighbors,
+                                               &neighbors);
+        num_neighbors_.push_back(numOfNeighbors);
+        for (int neigh = 0; neigh < numOfNeighbors; neigh++){
+            neighbor_list.push_back(neighbors[neigh]);
+        }
+    }
+
+    modelObject->TorchModel->SetInputNode(2, num_neighbors_.data(), num_neighbors_.size());
+    modelObject->TorchModel->SetInputNode(3, neighbor_list.data(), neighbor_list.size());
+    modelObject->TorchModel->Run(energy, forces);
+
     return ier;
 }
 

@@ -6,6 +6,7 @@
 #define TORCH_ML_MODEL_H
 
 #include "KIM_ModelDriverHeaders.hpp"
+#include "ml_model.hpp"
 
 extern "C" {
 int model_driver_create(KIM::ModelDriverCreate * const modelDriverCreate,
@@ -20,15 +21,22 @@ int model_driver_create(KIM::ModelDriverCreate * const modelDriverCreate,
 
 class TorchMLModel
 {
- public:
-    double m, c, inflDist;
-  TorchMLModel(KIM::ModelDriverCreate * const modelDriverCreate,
-                  KIM::LengthUnit const requestedLengthUnit,
-                  KIM::EnergyUnit const requestedEnergyUnit,
-                  KIM::ChargeUnit const requestedChargeUnit,
-                  KIM::TemperatureUnit const requestedTemperatureUnit,
-                  KIM::TimeUnit const requestedTimeUnit,
-                  int * const ier);
+    public:
+       double inflDist;
+       // TODO fic CamelCase
+       MLModel* TorchModel;
+       int n_elements;
+       std::vector<std::string> elements_list;
+       std::string preprocessing;
+       std::string model_name;
+
+       TorchMLModel(KIM::ModelDriverCreate * const modelDriverCreate,
+                     KIM::LengthUnit const requestedLengthUnit,
+                     KIM::EnergyUnit const requestedEnergyUnit,
+                     KIM::ChargeUnit const requestedChargeUnit,
+                     KIM::TemperatureUnit const requestedTemperatureUnit,
+                     KIM::TimeUnit const requestedTimeUnit,
+                     int * const ier);
 //  ~TorchMLModel();
 
   // no need to make these "extern" since KIM will only access them

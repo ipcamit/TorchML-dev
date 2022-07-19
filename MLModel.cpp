@@ -6,18 +6,15 @@
 #include <torch/script.h>
 
 MLModel *MLModel::create(const char *model_file_path, MLModelType ml_model_type,
-                         const char *const device_name)
-{
-    if (ml_model_type == ML_MODEL_PYTORCH)
-    {
+                         const char *const device_name) {
+    if (ml_model_type == ML_MODEL_PYTORCH) {
         return new PytorchModel(model_file_path, device_name);
     }
     // FIXME: raise an exception here if ``ml_model_type`` doesn't match any
     // known enumerations
 }
 
-void PytorchModel::SetExecutionDevice(const char *const device_name)
-{
+void PytorchModel::SetExecutionDevice(const char *const device_name) {
     // Use the requested device name char array to create a torch Device
     // object.  Generally, the ``device_name`` parameter is going to come
     // from a call to std::getenv(), so it is defined as const.
@@ -25,20 +22,16 @@ void PytorchModel::SetExecutionDevice(const char *const device_name)
     std::string device_name_as_str;
 
     // Default to 'cpu'
-    if (device_name == nullptr)
-    {
+    if (device_name == nullptr) {
         device_name_as_str = "cpu";
-    }
-    else
-    {
+    } else {
         device_name_as_str = device_name;
     }
 
     device_ = new torch::Device(device_name_as_str);
 }
 
-torch::Dtype PytorchModel::get_torch_data_type(int *)
-{
+torch::Dtype PytorchModel::get_torch_data_type(int *) {
     // Get the size used by 'int' on this platform and set torch tensor type
     // appropriately
     const std::size_t platform_size_int = sizeof(int);
@@ -51,13 +44,12 @@ torch::Dtype PytorchModel::get_torch_data_type(int *)
     platform_size_int_to_torch_dtype[8] = torch::kInt64;
 
     torch::Dtype torch_dtype =
-        platform_size_int_to_torch_dtype[platform_size_int];
+            platform_size_int_to_torch_dtype[platform_size_int];
 
     return torch_dtype;
 }
 
-torch::Dtype PytorchModel::get_torch_data_type(double *)
-{
+torch::Dtype PytorchModel::get_torch_data_type(double *) {
     return torch::kFloat64;
 }
 
@@ -66,45 +58,42 @@ torch::Dtype PytorchModel::get_torch_data_type(double *)
 // virtual functions are also virtual, we can't use regular C++ templates.  Is
 // it worth using the preprocessor for this?
 void PytorchModel::SetInputNode(int model_input_index, int *input, int size,
-                                bool requires_grad)
-{
+                                bool requires_grad) {
     // Map C++ data type used for the input here into the appropriate
     // fixed-width torch data type
     torch::Dtype torch_dtype = get_torch_data_type(input);
 
     // FIXME: Determine device to create tensor on
     torch::TensorOptions tensor_options =
-        torch::TensorOptions().dtype(torch_dtype).requires_grad(requires_grad);
+            torch::TensorOptions().dtype(torch_dtype).requires_grad(requires_grad);
 
     // Finally, create the input tensor and store it on the relevant MLModel
     // attr
     torch::Tensor input_tensor =
-        torch::from_blob(input, {size}, tensor_options).to(*device_);
+            torch::from_blob(input, {size}, tensor_options).to(*device_);
 
     model_inputs_[model_input_index] = input_tensor;
 }
 
 void PytorchModel::SetInputNode(int model_input_index, double *input, int size,
-                                bool requires_grad)
-{
+                                bool requires_grad) {
     // Map C++ data type used for the input here into the appropriate
     // fixed-width torch data type
     torch::Dtype torch_dtype = get_torch_data_type(input);
 
     // FIXME: Determine device to create tensor on
     torch::TensorOptions tensor_options =
-        torch::TensorOptions().dtype(torch_dtype).requires_grad(requires_grad);
+            torch::TensorOptions().dtype(torch_dtype).requires_grad(requires_grad);
 
     // Finally, create the input tensor and store it on the relevant MLModel
     // attr
     torch::Tensor input_tensor =
-        torch::from_blob(input, {size}, tensor_options).to(*device_);
+            torch::from_blob(input, {size}, tensor_options).to(*device_);
 
     model_inputs_[model_input_index] = input_tensor;
 }
 
-void PytorchModel::Run(double *energy, double *forces)
-{
+void PytorchModel::Run(double *energy, double *forces) {
     // FIXME: Make this work for arbitrary number/type of outputs?  This may
     // lead us to make Run() take no parameters, and instead define separate
     // methods for accessing each of the outputs of the ML model.
@@ -116,36 +105,32 @@ void PytorchModel::Run(double *energy, double *forces)
 
     std::vector<c10::IValue> output_tensor_list;
     const auto output_tensor_list_tmp =
-                module_.forward(model_inputs_).toTuple()->elements();
-    for (auto tensor: output_tensor_list_tmp){
-            output_tensor_list.push_back(tensor);
+            module_.forward(model_inputs_).toTuple()->elements();
+    for (auto tensor: output_tensor_list_tmp) {
+        output_tensor_list.push_back(tensor);
     }
     // After moving the first output tensor back to the CPU (if necessary),
     // extract its value as the partial energy
     *energy =
-        *output_tensor_list[0].toTensor().to(torch::kCPU).data_ptr<double>();
+            *output_tensor_list[0].toTensor().to(torch::kCPU).data_ptr<double>();
 
     // After moving the second output tensor back to the CPU (if necessary),
     // extract its contents as the partial forces
     auto torch_forces = output_tensor_list[1].toTensor().to(torch::kCPU);
     // TODO: Move the accessor data extraction to a separate private method
     auto force_accessor = torch_forces.accessor<double, 1>();
-    for (int atom_count = 0; atom_count < force_accessor.size(0); ++atom_count)
-    {
+    for (int atom_count = 0; atom_count < force_accessor.size(0); ++atom_count) {
         forces[atom_count] = force_accessor[atom_count];
     }
 }
 
-PytorchModel::PytorchModel(const char *model_file_path, const char *device_name)
-{
+PytorchModel::PytorchModel(const char *model_file_path, const char *device_name) {
     model_file_path_ = model_file_path;
-    try
-    {
+    try {
         // Deserialize the ScriptModule from a file using torch::jit::load().
         module_ = torch::jit::load(model_file_path_);
     }
-    catch (const c10::Error &e)
-    {
+    catch (const c10::Error &e) {
         std::cerr << "ERROR: An error occurred while attempting to load the "
                      "pytorch model file from path "
                   << model_file_path << std::endl;
@@ -156,7 +141,7 @@ PytorchModel::PytorchModel(const char *model_file_path, const char *device_name)
     for (auto named_variable: module_.named_attributes()) {
         if (named_variable.name == "descriptor") {
             auto descriptor_string_val = (*named_variable.value.toString()).string();
-            if (!descriptor_string_val.empty()){
+            if (!descriptor_string_val.empty()) {
                 descriptor_required = true;
                 descriptor_function = descriptor_string_val;
             }
@@ -177,10 +162,8 @@ PytorchModel::PytorchModel(const char *model_file_path, const char *device_name)
     module_.eval();
 }
 
-PytorchModel::~PytorchModel()
-{
-    if (device_ != nullptr)
-    {
+PytorchModel::~PytorchModel() {
+    if (device_ != nullptr) {
         delete device_;
     }
 }

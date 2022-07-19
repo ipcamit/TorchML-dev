@@ -1,16 +1,12 @@
 #include "TorchMLModelDriver.hpp"
 //#include "TorchMLModelImplementation.hpp"
-//#include <cstddef>
-#include <iostream>
 #include "KIM_LogMacros.hpp"
-#include <fstream>
 #include <map>
 #include <vector>
 
 #define MAX_FILE_NUM 2
-typedef double VecOfSize3[3];
+//typedef double VecOfSize3[3];
 #define KIM_DEVICE_ENV_VAR "KIM_MODEL_EXECUTION_DEVICE"
-
 
 
 //==============================================================================
@@ -30,14 +26,13 @@ int model_driver_create(KIM::ModelDriverCreate *const modelDriverCreate,
     int ier;
     // read input files, convert units if needed, compute
     // interpolation coefficients, set cutoff, and publish parameters
-    TorchMLModelDriver *const modelObject
-            = new TorchMLModelDriver(modelDriverCreate,
-                                     requestedLengthUnit,
-                                     requestedEnergyUnit,
-                                     requestedChargeUnit,
-                                     requestedTemperatureUnit,
-                                     requestedTimeUnit,
-                                     &ier);
+    auto modelObject = new TorchMLModelDriver(modelDriverCreate,
+                                              requestedLengthUnit,
+                                              requestedEnergyUnit,
+                                              requestedChargeUnit,
+                                              requestedTemperatureUnit,
+                                              requestedTimeUnit,
+                                              &ier);
 
     if (ier) {
         // constructor already reported the error
@@ -73,7 +68,10 @@ TorchMLModelDriver::TorchMLModelDriver(
         KIM::TimeUnit const requestedTimeUnit,
         int *const ier) {
     *ier = false;
-
+    //initialize members to remove warning--
+    influence_distance = 0.0;
+    n_elements = 0;
+    torchModel = nullptr;
     // Read parameter files from model driver ---------------------------------------
     readParameters(modelDriverCreate, ier);
     LOG_DEBUG("Read Param files");
@@ -116,8 +114,6 @@ TorchMLModelDriver::TorchMLModelDriver(
                                        KIM::CHARGE_UNIT::unused,
                                        KIM::TEMPERATURE_UNIT::unused,
                                        KIM::TIME_UNIT::unused);
-
-    return;
 }
 
 //******************************************************************************
@@ -129,10 +125,7 @@ int TorchMLModelDriver::Destroy(KIM::ModelDestroy *const modelDestroy) {
     TorchMLModelDriver *modelObject;
     modelDestroy->GetModelBufferPointer(reinterpret_cast<void **>(&modelObject));
 
-    if (modelObject != NULL) {
-        // delete object itself
-        delete modelObject;
-    }
+    delete modelObject;
 
     // everything is good
     return false;
@@ -143,8 +136,6 @@ int TorchMLModelDriver::Destroy(KIM::ModelDestroy *const modelDestroy) {
 int TorchMLModelDriver::Refresh(KIM::ModelRefresh *const modelRefresh) {
     TorchMLModelDriver *modelObject;
     modelRefresh->GetModelBufferPointer(reinterpret_cast<void **>(&modelObject));
-//    modelObject->m = 0.0;
-//    modelObject->c = 0.0;
     return false;
 }
 
@@ -157,53 +148,19 @@ int TorchMLModelDriver::Compute(
     TorchMLModelDriver *modelObject;
     modelCompute->GetModelBufferPointer(reinterpret_cast<void **>(&modelObject));
 
-    int const *numberOfParticlesPointer;
-    int *particleSpeciesCodes; // FIXME: Implement species code handling
-    int *particleContributing = NULL;
-    double *forces = NULL;
-    double *coordinates = NULL;
-    VecOfSize3 *coordinates3;
-    double *energy = NULL;
-    int numOfNeighbors;
-    int const *neighbors;
+    // VecOfSize3 *coordinates3;
+    double *energy = nullptr;
+    double *forces = nullptr;
 
     auto ier = modelComputeArguments->GetArgumentPointer(
-            KIM::COMPUTE_ARGUMENT_NAME::numberOfParticles,
-            &numberOfParticlesPointer)
-               || modelComputeArguments->GetArgumentPointer(
-            KIM::COMPUTE_ARGUMENT_NAME::particleSpeciesCodes,
-            &particleSpeciesCodes)
-               || modelComputeArguments->GetArgumentPointer(
-            KIM::COMPUTE_ARGUMENT_NAME::particleContributing,
-            &particleContributing)
-               || modelComputeArguments->GetArgumentPointer(
-            KIM::COMPUTE_ARGUMENT_NAME::coordinates,
-            (double const **) &coordinates)
-               || modelComputeArguments->GetArgumentPointer(
             KIM::COMPUTE_ARGUMENT_NAME::partialForces,
             (double const **) &forces)
                || modelComputeArguments->GetArgumentPointer(
             KIM::COMPUTE_ARGUMENT_NAME::partialEnergy,
             &energy);
-
-    int const numberOfParticles = *numberOfParticlesPointer;
-
-    modelObject->torchModel->SetInputNode(0, particleContributing, numberOfParticles);
-    modelObject->torchModel->SetInputNode(1, coordinates, 3 * numberOfParticles, true);
-
-    for (int i = 0; i < numberOfParticles; i++) {
-        modelComputeArguments->GetNeighborList(0,
-                                               i,
-                                               &numOfNeighbors,
-                                               &neighbors);
-        modelObject->num_neighbors_.push_back(numOfNeighbors);
-        for (int neigh = 0; neigh < numOfNeighbors; neigh++) {
-            modelObject->neighbor_list.push_back(neighbors[neigh]);
-        }
-    }
-
-    modelObject->torchModel->SetInputNode(2, modelObject->num_neighbors_.data(), modelObject->num_neighbors_.size());
-    modelObject->torchModel->SetInputNode(3, modelObject->neighbor_list.data(), modelObject->neighbor_list.size());
+    if (ier) return -1;
+    // TODO: This will call preprocessing based on model inputs
+    modelObject->setInputs(modelComputeArguments);
     modelObject->torchModel->Run(energy, forces);
 
     return ier;
@@ -239,13 +196,61 @@ int TorchMLModelDriver::ComputeArgumentsCreate(
 }
 
 // Auxiliary methods------------------------------------------------------------
-//void TorchMLModelDriver::updateNeighborList() {
-//
-//}
-//
-//void TorchMLModelDriver::setInputs(TorchMLModelDriver & modelObject) {
-//
-//}
+void TorchMLModelDriver::updateNeighborList(KIM::ModelComputeArguments const *const modelComputeArguments,
+                                            int const numberOfParticles) {
+    int numOfNeighbors;
+    int const *neighbors;
+    num_neighbors_.clear();
+    neighbor_list.clear();
+    for (int i = 0; i < numberOfParticles; i++) {
+        modelComputeArguments->GetNeighborList(0,
+                                               i,
+                                               &numOfNeighbors,
+                                               &neighbors);
+        num_neighbors_.push_back(numOfNeighbors);
+        for (int neigh = 0; neigh < numOfNeighbors; neigh++) {
+            neighbor_list.push_back(neighbors[neigh]);
+        }
+    }
+}
+
+#undef KIM_LOGGER_OBJECT_NAME
+#define KIM_LOGGER_OBJECT_NAME modelComputeArguments
+
+void TorchMLModelDriver::setInputs(KIM::ModelComputeArguments const *const modelComputeArguments) {
+
+    int const *numberOfParticlesPointer;
+    int *particleSpeciesCodes; // FIXME: Implement species code handling
+    int *particleContributing = nullptr;
+    double *coordinates = nullptr;
+    int numOfNeighbors;
+    int const *neighbors;
+
+    auto ier = modelComputeArguments->GetArgumentPointer(
+            KIM::COMPUTE_ARGUMENT_NAME::numberOfParticles,
+            &numberOfParticlesPointer)
+               || modelComputeArguments->GetArgumentPointer(
+            KIM::COMPUTE_ARGUMENT_NAME::particleSpeciesCodes,
+            &particleSpeciesCodes)
+               || modelComputeArguments->GetArgumentPointer(
+            KIM::COMPUTE_ARGUMENT_NAME::particleContributing,
+            &particleContributing)
+               || modelComputeArguments->GetArgumentPointer(
+            KIM::COMPUTE_ARGUMENT_NAME::coordinates,
+            (double const **) &coordinates);
+    LOG_ERROR("Could not create model compute arguments input @ setInputs");
+    if (ier) return;
+    int const numberOfParticles = *numberOfParticlesPointer;
+
+    torchModel->SetInputNode(0, particleContributing, numberOfParticles);
+    torchModel->SetInputNode(1, coordinates, 3 * numberOfParticles, true);
+
+    updateNeighborList(modelComputeArguments, numberOfParticles);
+
+    torchModel->SetInputNode(2, num_neighbors_.data(), static_cast<int>(num_neighbors_.size()));
+    torchModel->SetInputNode(3, neighbor_list.data(), static_cast<int>(neighbor_list.size()));
+}
+
 #undef KIM_LOGGER_OBJECT_NAME
 #define KIM_LOGGER_OBJECT_NAME modelDriverCreate
 
@@ -299,7 +304,7 @@ void TorchMLModelDriver::readParameters(KIM::ModelDriverCreate *const modelDrive
         std::getline(file_ptr, placeholder_string);
 
         for (int i = 0; i < n_elements; i++) {
-            auto pos = placeholder_string.find(" ");
+            auto pos = placeholder_string.find(' ');
             elements_list.push_back(placeholder_string.substr(0, pos));
             if (pos == std::string::npos) {
                 if (i + 1 != n_elements) {
@@ -404,8 +409,8 @@ void TorchMLModelDriver::unitConversion(KIM::ModelDriverCreate *const modelDrive
 
 }
 
-void TorchMLModelDriver::setSpecies(KIM::ModelDriverCreate *const modelDriverCreate, int * const ier) {
-        for (auto species: elements_list) {
+void TorchMLModelDriver::setSpecies(KIM::ModelDriverCreate *const modelDriverCreate, int *const ier) {
+    for (auto const &species: elements_list) {
         KIM::SpeciesName const specName1(species);
 
         //    std::map<KIM::SpeciesName const, int, KIM::SPECIES_NAME::Comparator> modelSpeciesMap;
@@ -414,7 +419,7 @@ void TorchMLModelDriver::setSpecies(KIM::ModelDriverCreate *const modelDriverCre
         //    speciesNameVector.push_back(species);
         //    // check for new species
         //    std::map<KIM::SpeciesName const, int, KIM::SPECIES_NAME::Comparator>::const_iterator iIter = modelSpeciesMap.find(specName1);
-        // all of the above is to remove species duplicates
+        // all the above is to remove species duplicates
         *ier = modelDriverCreate->SetSpeciesCode(specName1, 0);
         if (*ier) return;
     }

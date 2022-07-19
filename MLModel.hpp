@@ -7,14 +7,12 @@
 
 #include <torch/script.h>
 
-enum MLModelType
-{
+enum MLModelType {
     ML_MODEL_PYTORCH,
 };
 
 /* Abstract base class for an ML model -- 'product' of the factory pattern */
-class MLModel
-{
+class MLModel {
 public:
     static MLModel *create(const char * /*model_file_path*/,
                            MLModelType /*ml_model_type*/,
@@ -30,23 +28,24 @@ public:
     // supported overloading.
     virtual void SetInputNode(int /*model_input_index*/, int * /*input*/,
                               int /*size*/, bool requires_grad = false) = 0;
+
     virtual void SetInputNode(int /*model_input_index*/, double * /*input*/,
                               int /*size*/, bool requires_grad = false) = 0;
 
     virtual void Run(double * /*energy*/, double * /*forces*/) = 0;
 
-    virtual ~MLModel(){};
+    virtual ~MLModel() {};
 };
 
 // Concrete MLModel corresponding to pytorch
-class PytorchModel : public MLModel
-{
+class PytorchModel : public MLModel {
 private:
     torch::jit::script::Module module_;
     std::vector<torch::jit::IValue> model_inputs_;
     torch::Device *device_;
 
     torch::Dtype get_torch_data_type(int *);
+
     torch::Dtype get_torch_data_type(double *);
 
     void SetExecutionDevice(const char * /*device_name*/);
@@ -61,6 +60,7 @@ public:
 
     void SetInputNode(int /*model_input_index*/, int * /*input*/, int /*size*/,
                       bool requires_grad = false);
+
     void SetInputNode(int /*model_input_index*/, double * /*input*/,
                       int /*size*/, bool requires_grad = false);
 

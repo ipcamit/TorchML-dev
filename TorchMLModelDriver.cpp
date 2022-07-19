@@ -72,6 +72,7 @@ TorchMLModelDriver::TorchMLModelDriver(
     influence_distance = 0.0;
     n_elements = 0;
     torchModel = nullptr;
+    returns_forces = false;
     // Read parameter files from model driver ---------------------------------------
     readParameters(modelDriverCreate, ier);
     LOG_DEBUG("Read Param files");
@@ -159,7 +160,6 @@ int TorchMLModelDriver::Compute(
             KIM::COMPUTE_ARGUMENT_NAME::partialEnergy,
             &energy);
     if (ier) return -1;
-    // TODO: This will call preprocessing based on model inputs
     modelObject->setInputs(modelComputeArguments);
     modelObject->torchModel->Run(energy, forces);
 
@@ -195,6 +195,7 @@ int TorchMLModelDriver::ComputeArgumentsCreate(
     return error;
 }
 
+// *****************************************************************************
 // Auxiliary methods------------------------------------------------------------
 void TorchMLModelDriver::updateNeighborList(KIM::ModelComputeArguments const *const modelComputeArguments,
                                             int const numberOfParticles) {
@@ -214,17 +215,17 @@ void TorchMLModelDriver::updateNeighborList(KIM::ModelComputeArguments const *co
     }
 }
 
+// -----------------------------------------------------------------
 #undef KIM_LOGGER_OBJECT_NAME
 #define KIM_LOGGER_OBJECT_NAME modelComputeArguments
 
 void TorchMLModelDriver::setInputs(KIM::ModelComputeArguments const *const modelComputeArguments) {
+    // TODO: This will call preprocessing based on model inputs
 
     int const *numberOfParticlesPointer;
     int *particleSpeciesCodes; // FIXME: Implement species code handling
     int *particleContributing = nullptr;
     double *coordinates = nullptr;
-    int numOfNeighbors;
-    int const *neighbors;
 
     auto ier = modelComputeArguments->GetArgumentPointer(
             KIM::COMPUTE_ARGUMENT_NAME::numberOfParticles,
@@ -251,6 +252,7 @@ void TorchMLModelDriver::setInputs(KIM::ModelComputeArguments const *const model
     torchModel->SetInputNode(3, neighbor_list.data(), static_cast<int>(neighbor_list.size()));
 }
 
+// --------------------------------------------------------------------------------
 #undef KIM_LOGGER_OBJECT_NAME
 #define KIM_LOGGER_OBJECT_NAME modelDriverCreate
 
@@ -332,7 +334,7 @@ void TorchMLModelDriver::readParameters(KIM::ModelDriverCreate *const modelDrive
         do {
             std::getline(file_ptr, placeholder_string);
         } while (placeholder_string[0] == '#');
-        // which preprocessing to use
+        // influence distance
         influence_distance = std::stod(placeholder_string);
 
         // blank line
@@ -341,8 +343,20 @@ void TorchMLModelDriver::readParameters(KIM::ModelDriverCreate *const modelDrive
         do {
             std::getline(file_ptr, placeholder_string);
         } while (placeholder_string[0] == '#');
-
+        // Model name for comparison
         model_name = placeholder_string;
+
+        // blank line
+        std::getline(file_ptr, placeholder_string);
+        // Ignore comments
+        do {
+            std::getline(file_ptr, placeholder_string);
+        } while (placeholder_string[0] == '#');
+        // Does the model return forces? If no then we need to compute gradients
+        // If yes we can optimize it further using inference mode
+        for (char & t : placeholder_string) t = static_cast<char>(tolower(t));
+        returns_forces = placeholder_string == "true";
+
     } else {
         LOG_ERROR("Param file not found");
         *ier = true;

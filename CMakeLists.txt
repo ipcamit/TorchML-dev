@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 3.10)
 
+# Need these packages on my laptop
+# TODO find more agnostic way for it. Discuss with Ryan?
 find_package(EnvModules REQUIRED)
 env_module(load kim_api)
 env_module(load libtorch110)
@@ -13,6 +15,8 @@ project(TorchMLModelDriver LANGUAGES CXX)
 kim_api_items_setup_after_project(ITEM_TYPE "modelDriver")
 
 # This model driver requires C++11
+# But ++14 works fine too, so using that for now
+# TODO check strict c++11 compliance
 set(CMAKE_CXX_STANDARD 14)
 
 find_package(Torch REQUIRED)
@@ -23,6 +27,7 @@ add_kim_api_model_driver_library(
   CREATE_ROUTINE_LANGUAGE "cpp"
 )
 
+# TODO re-enable subdirectory for ML model, as otherwise compilation is lot slower
 #add_subdirectory(MLModel)
 
 target_sources(${PROJECT_NAME} PRIVATE
@@ -31,10 +36,7 @@ target_sources(${PROJECT_NAME} PRIVATE
 #        TorchMLModelImplementation.cpp
 )
 
-target_link_libraries("${PROJECT_NAME}" PRIVATE ${TORCH_LIBRARIES})
-#
-#target_include_directories("${PROJECT_NAME}" PRIVATE
-#  "${PROJECT_BINARY_DIR}"
-#  "${PROJECT_SOURCE_DIR}/MLModel"
-#  )
+# Suppress annoying Variable not used warnings, parameter still warns :(
+add_compile_options(-Wno-unused-variable -Wno-unused-parameter)
 
+target_link_libraries("${PROJECT_NAME}" PRIVATE ${TORCH_LIBRARIES})

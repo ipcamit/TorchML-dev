@@ -30,6 +30,7 @@ public:
     std::vector<std::string> elements_list;
     std::string preprocessing;
     std::string model_name;
+    bool returns_forces;
 
     TorchMLModelDriver(KIM::ModelDriverCreate *modelDriverCreate,
                        KIM::LengthUnit requestedLengthUnit,

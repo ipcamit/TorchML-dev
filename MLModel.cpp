@@ -163,7 +163,5 @@ PytorchModel::PytorchModel(const char *model_file_path, const char *device_name)
 }
 
 PytorchModel::~PytorchModel() {
-    if (device_ != nullptr) {
-        delete device_;
-    }
+    delete device_;
 }

@@ -93,6 +93,26 @@ void PytorchModel::SetInputNode(int model_input_index, double *input, int size,
     model_inputs_[model_input_index] = input_tensor;
 }
 
+void PytorchModel::SetInputNode(int model_input_index, double *input, std::vector<int>& size,
+                                bool requires_grad) {
+
+    torch::Dtype torch_dtype = get_torch_data_type(input);
+
+    // FIXME: Determine device to create tensor on
+    torch::TensorOptions tensor_options =
+            torch::TensorOptions().dtype(torch_dtype).requires_grad(requires_grad);
+
+    // Finally, create the input tensor and store it on the relevant MLModel
+    // attr
+    std::vector<int64_t> size_t;
+    for (auto val: size) size_t.push_back(static_cast<int64_t>(val));
+    torch::Tensor input_tensor =
+            torch::from_blob(input, size_t, tensor_options).to(*device_);
+
+    model_inputs_[model_input_index] = input_tensor;
+}
+
+
 void PytorchModel::Run(double *energy, double *forces) {
     // FIXME: Make this work for arbitrary number/type of outputs?  This may
     // lead us to make Run() take no parameters, and instead define separate
@@ -138,15 +158,15 @@ PytorchModel::PytorchModel(const char *model_file_path, const char *device_name,
     }
 
     // Check if model contain descriptor information
-    for (auto named_variable: module_.named_attributes()) {
-        if (named_variable.name == "descriptor") {
-            auto descriptor_string_val = (*named_variable.value.toString()).string();
-            if (!descriptor_string_val.empty()) {
-                descriptor_required = true;
-                descriptor_function = descriptor_string_val;
-            }
-        }
-    }
+//    for (auto named_variable: module_.named_attributes()) {
+//        if (named_variable.name == "descriptor") {
+//            auto descriptor_string_val = (*named_variable.value.toString()).string();
+//            if (!descriptor_string_val.empty()) {
+//                descriptor_required = true;
+//                descriptor_function = descriptor_string_val;
+//            }
+//        }
+//    }
 
     SetExecutionDevice(device_name);
 

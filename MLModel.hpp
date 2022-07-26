@@ -72,6 +72,9 @@ public:
     void SetInputNode(int /*model_input_index*/, double * /*input*/,
                       int /*size*/, bool requires_grad = false);
 
+    void SetInputNode(int /*model_input_index*/, double * /*input*/,
+                      std::vector<int>& /*arb size*/, bool requires_grad = false);
+
     void SetInputSize(int /*input size*/);
 
     void Run(double * /*energy*/, double * /*forces*/);

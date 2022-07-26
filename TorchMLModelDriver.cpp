@@ -314,24 +314,36 @@ void TorchMLModelDriver::setDescriptorInputs(const KIM::ModelComputeArguments *m
     neigh_from = 0; n_neigh = 0;
 
     int contributing_atoms_count = 0;
-    int all_atom_counts = coordinates.size(0)/3;
+    for (int i = 0; i < *numberOfParticlesPointer; i++){
+        if (*(particleSpeciesCodes + i)==1){
+            contributing_atoms_count +=1;
+        }
+    }
 
-
-
-
+    // Initialize descriptors on the basis of function
     auto option = torch::TensorOptions().dtype(torch::kFloat64).requires_grad(true);
 
-    double * descriptor = new double [contributing_atoms_count * width];
-        for (int i = 0; i < contributing_atoms_count; i++){
-            for (int j = i * width; j < (i + 1) * width; j++){descriptor[j] = 0.;}
-            n_neigh = num_neighbours[i].item<int>();
-            auto n_list = neighbour_list.narrow(0,neigh_from,n_neigh);
-            neigh_from += n_neigh;
-            symmetry_function_atomic(i, coordinates.data_ptr<double>(), particle_species.data(),
-                                     n_list.data_ptr<int>(),n_neigh, descriptor + (i * width), &SymParam);
-        }
-}
+    // TODO this is temporary hard coded fix. Need to improve it by inheriting Base
+    // descriptor class in all descriptors. **Priority**
+    std::cout << "USING SYMUFUN WORKAROUND. FIX ME ASAP" <<"\n";
+    auto sf = reinterpret_cast<SymmetryFunctionParams *>(descriptor->descriptor_map["SymFun"]);
+    int width = sf->width;
+    //
 
+    updateNeighborList(modelComputeArguments, *numberOfParticlesPointer);
+
+    double * descriptor_array = new double [contributing_atoms_count * width];
+    for (int i = 0; i < contributing_atoms_count; i++){
+        for (int j = i * width; j < (i + 1) * width; j++){descriptor_array[j] = 0.;}
+        n_neigh =  num_neighbors_[i];
+        std::vector<int> n_list(neighbor_list.begin() + neigh_from, neighbor_list.begin() + n_neigh);
+        neigh_from += n_neigh;
+        symmetry_function_atomic(i, coordinates, particleSpeciesCodes,
+                                     n_list.data(),n_neigh, descriptor_array + (i * width), sf);
+    }
+//    auto descriptor_tensor = torch::from_blob(descriptor_array, {contributing_atoms_count, width}, option);
+    torchModel->SetInputNode(0,descriptor_array,contributing_atoms_count,true);
+}
 
 // --------------------------------------------------------------------------------
 #undef KIM_LOGGER_OBJECT_NAME

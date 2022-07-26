@@ -11,6 +11,8 @@
 #include "KIM_ModelDriverHeaders.hpp"
 #include "MLModel.hpp"
 #include "descriptors.hpp"
+//TODO Remove the SYMFUN calls below. only for temp workaround
+#include "SymFun/SymFun.hpp"
 
 extern "C" {
 int model_driver_create(KIM::ModelDriverCreate *modelDriverCreate,

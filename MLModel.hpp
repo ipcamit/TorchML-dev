@@ -1,12 +1,17 @@
 #ifndef MLMODEL_HPP
 #define MLMODEL_HPP
 
-#include <stdlib.h>
+#include <cstdlib>
 #include <vector>
 #include <string>
 
 #include <torch/script.h>
 
+// TODO Specify kind of models and enumerate
+// Basic kind I can think of
+// 1. Core model: numberOfParticles, coord, neighbours count, neighbour list
+// 2. Descriptor model: numberOfParticles, coord, neighbours count, neighbour list
+// 3. Graph model: TBA
 enum MLModelType {
     ML_MODEL_PYTORCH,
 };
@@ -16,7 +21,8 @@ class MLModel {
 public:
     static MLModel *create(const char * /*model_file_path*/,
                            MLModelType /*ml_model_type*/,
-                           const char *const /*device_name*/);
+                           const char * /*device_name*/,
+                           int /*model_input_size*/);
 
     // TODO: Should we use named inputs instead?  I believe they're required
     // by ONNX, but not sure exactly how they work vis-a-vis exporting to a
@@ -52,17 +58,21 @@ private:
 
 public:
     const char *model_file_path_;
-    bool descriptor_required = false;
-    std::string descriptor_function;
+    // TODO move descriptor to param file as ideally model is not dependent on it
+//    bool descriptor_required = false;
+//    std::string descriptor_function;
 
     PytorchModel(const char * /*model_file_path*/,
-                 const char *const /*device_name*/);
+                 const char * /*device_name*/,
+                 int /*input size*/);
 
     void SetInputNode(int /*model_input_index*/, int * /*input*/, int /*size*/,
                       bool requires_grad = false);
 
     void SetInputNode(int /*model_input_index*/, double * /*input*/,
                       int /*size*/, bool requires_grad = false);
+
+    void SetInputSize(int /*input size*/);
 
     void Run(double * /*energy*/, double * /*forces*/);
 

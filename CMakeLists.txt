@@ -27,6 +27,8 @@ add_kim_api_model_driver_library(
   CREATE_ROUTINE_LANGUAGE "cpp"
 )
 
+include_directories(../colabfit-descriptor-library)
+
 # TODO re-enable subdirectory for ML model, as otherwise compilation is lot slower
 #add_subdirectory(MLModel)
 

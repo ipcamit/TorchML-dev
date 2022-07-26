@@ -6,9 +6,9 @@
 #include <torch/script.h>
 
 MLModel *MLModel::create(const char *model_file_path, MLModelType ml_model_type,
-                         const char *const device_name) {
+                         const char *const device_name, const int model_input_size) {
     if (ml_model_type == ML_MODEL_PYTORCH) {
-        return new PytorchModel(model_file_path, device_name);
+        return new PytorchModel(model_file_path, device_name, model_input_size);
     }
     // FIXME: raise an exception here if ``ml_model_type`` doesn't match any
     // known enumerations
@@ -124,7 +124,7 @@ void PytorchModel::Run(double *energy, double *forces) {
     }
 }
 
-PytorchModel::PytorchModel(const char *model_file_path, const char *device_name) {
+PytorchModel::PytorchModel(const char *model_file_path, const char *device_name, const int size_) {
     model_file_path_ = model_file_path;
     try {
         // Deserialize the ScriptModule from a file using torch::jit::load().
@@ -155,11 +155,16 @@ PytorchModel::PytorchModel(const char *model_file_path, const char *device_name)
 
     // Reserve size for the four fixed model inputs (particle_contributing,
     // coordinates, number_of_neighbors, neighbor_list)
-    model_inputs_.resize(4);
+    // Model inputs to be determined
+     model_inputs_.resize(size_);
 
     // Set model to evaluation mode to set any dropout or batch normalization
     // layers to evaluation mode
     module_.eval();
+}
+
+void PytorchModel::SetInputSize(int size) {
+    model_inputs_.resize(size);
 }
 
 PytorchModel::~PytorchModel() {

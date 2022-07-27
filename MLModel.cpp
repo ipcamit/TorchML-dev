@@ -113,7 +113,7 @@ void PytorchModel::SetInputNode(int model_input_index, double *input, std::vecto
 }
 
 
-void PytorchModel::Run(double *energy, double *forces) {
+void PytorchModel::Run(c10::IValue& out_tensor) {
     // FIXME: Make this work for arbitrary number/type of outputs?  This may
     // lead us to make Run() take no parameters, and instead define separate
     // methods for accessing each of the outputs of the ML model.
@@ -123,25 +123,26 @@ void PytorchModel::Run(double *energy, double *forces) {
     // method return a tuple where the energy is the first entry and
     // the forces are the second
 
-    std::vector<c10::IValue> output_tensor_list;
-    const auto output_tensor_list_tmp =
-            module_.forward(model_inputs_).toTuple()->elements();
-    for (auto tensor: output_tensor_list_tmp) {
-        output_tensor_list.push_back(tensor);
-    }
+//    std::vector<c10::IValue> output_tensor_list;
+//    const auto output_tensor_list_tmp =
+//            module_.forward(model_inputs_).toTuple()->elements();
+//    for (auto tensor: output_tensor_list_tmp) {
+//        output_tensor_list.push_back(tensor);
+//    }
     // After moving the first output tensor back to the CPU (if necessary),
     // extract its value as the partial energy
-    *energy =
-            *output_tensor_list[0].toTensor().to(torch::kCPU).data_ptr<double>();
+//    *energy =
+//            *output_tensor_list[0].toTensor().to(torch::kCPU).data_ptr<double>();
 
     // After moving the second output tensor back to the CPU (if necessary),
     // extract its contents as the partial forces
-    auto torch_forces = output_tensor_list[1].toTensor().to(torch::kCPU);
-    // TODO: Move the accessor data extraction to a separate private method
-    auto force_accessor = torch_forces.accessor<double, 1>();
-    for (int atom_count = 0; atom_count < force_accessor.size(0); ++atom_count) {
-        forces[atom_count] = force_accessor[atom_count];
-    }
+//    auto torch_forces = output_tensor_list[1].toTensor().to(torch::kCPU);
+//    // TODO: Move the accessor data extraction to a separate private method
+//    auto force_accessor = torch_forces.accessor<double, 1>();
+//    for (int atom_count = 0; atom_count < force_accessor.size(0); ++atom_count) {
+//        forces[atom_count] = force_accessor[atom_count];
+//    }
+    out_tensor = module_.forward(model_inputs_);
 }
 
 PytorchModel::PytorchModel(const char *model_file_path, const char *device_name, const int size_) {
@@ -181,6 +182,21 @@ PytorchModel::PytorchModel(const char *model_file_path, const char *device_name,
     // Set model to evaluation mode to set any dropout or batch normalization
     // layers to evaluation mode
     module_.eval();
+}
+
+void PytorchModel::GetInputNode(c10::IValue & out_tensor) {
+    // return first tensor with grad = True
+    for (auto & Ival: model_inputs_){
+        if (Ival.toTensor().requires_grad()){
+            out_tensor = Ival;
+            return;
+        }
+    }
+}
+
+void PytorchModel::GetInputNode(int index, c10::IValue & out_tensor) {
+    // return first tensor with grad = True
+    out_tensor = model_inputs_[index];
 }
 
 void PytorchModel::SetInputSize(int size) {

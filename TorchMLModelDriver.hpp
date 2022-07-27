@@ -13,6 +13,7 @@
 #include "descriptors.hpp"
 //TODO Remove the SYMFUN calls below. only for temp workaround
 #include "SymFun/SymFun.hpp"
+#include <torch/torch.h>
 
 extern "C" {
 int model_driver_create(KIM::ModelDriverCreate *modelDriverCreate,
@@ -90,8 +91,8 @@ private:
 
     static void registerFunctionPointers(KIM::ModelDriverCreate *modelDriverCreate, int *ier);
     void preprocessInputs(KIM::ModelComputeArguments const *modelComputeArguments);
-    void postprocessOutputs(double *energy, double *forces);
-    void Run(KIM::ModelComputeArguments const *modelComputeArguments, double *energy, double *forces);
+    void postprocessOutputs(c10::IValue&, KIM::ModelComputeArguments const *);
+    void Run(KIM::ModelComputeArguments const *modelComputeArguments);
     // TorchMLModelImplementation * implementation_;
 };
 

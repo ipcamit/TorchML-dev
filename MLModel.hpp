@@ -38,7 +38,13 @@ public:
     virtual void SetInputNode(int /*model_input_index*/, double * /*input*/,
                               int /*size*/, bool requires_grad = false) = 0;
 
-    virtual void Run(double * /*energy*/, double * /*forces*/) = 0;
+    virtual void SetInputNode(int /*model_input_index*/, double * /*input*/,
+                      std::vector<int>& /*arb size*/, bool requires_grad = false) = 0;
+
+    virtual void GetInputNode(int /*model_input_index*/, c10::IValue &) = 0;
+    virtual void GetInputNode( c10::IValue &) = 0;
+
+    virtual void Run(c10::IValue &) = 0;
 
     virtual ~MLModel() {};
 };
@@ -75,9 +81,13 @@ public:
     void SetInputNode(int /*model_input_index*/, double * /*input*/,
                       std::vector<int>& /*arb size*/, bool requires_grad = false);
 
+    void GetInputNode(int /*model_input_index*/, c10::IValue &);
+    void GetInputNode(c10::IValue &);
+
     void SetInputSize(int /*input size*/);
 
-    void Run(double * /*energy*/, double * /*forces*/);
+//    void Run(double * /*energy*/, double * /*forces*/);
+    void Run(c10::IValue&);
 
     ~PytorchModel();
 };

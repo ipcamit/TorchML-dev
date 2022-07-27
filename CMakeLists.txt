@@ -28,6 +28,8 @@ add_kim_api_model_driver_library(
 )
 
 include_directories(../colabfit-descriptor-library)
+#link_directories(../colabfit-descriptor-library/cmake-build-debug-clang12)
+SET(CMAKE_SKIP_BUILD_RPATH  FALSE)
 
 # TODO re-enable subdirectory for ML model, as otherwise compilation is lot slower
 #add_subdirectory(MLModel)
@@ -40,5 +42,6 @@ target_sources(${PROJECT_NAME} PRIVATE
 
 # Suppress annoying Variable not used warnings, parameter still warns :(
 add_compile_options(-Wno-unused-variable -Wno-unused-parameter)
-
-target_link_libraries("${PROJECT_NAME}" PRIVATE ${TORCH_LIBRARIES})
+find_library(DESC_LIB descriptor HINTS ../colabfit-descriptor-library/cmake-build-debug-clang12)
+target_link_libraries("${PROJECT_NAME}" PRIVATE ${TORCH_LIBRARIES} ${DESC_LIB})
+#target_link_libraries(${PROJECT_NAME} SHARED libdescriptor)

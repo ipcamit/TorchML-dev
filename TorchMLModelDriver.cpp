@@ -158,22 +158,22 @@ int TorchMLModelDriver::Compute(
     TorchMLModelDriver *modelObject;
     modelCompute->GetModelBufferPointer(reinterpret_cast<void **>(&modelObject));
 
-    // VecOfSize3 *coordinates3;
-    double *energy = nullptr;
-    double *forces = nullptr;
-
-    auto ier = modelComputeArguments->GetArgumentPointer(
-            KIM::COMPUTE_ARGUMENT_NAME::partialForces,
-            (double const **) &forces)
-               || modelComputeArguments->GetArgumentPointer(
-            KIM::COMPUTE_ARGUMENT_NAME::partialEnergy,
-            &energy);
-    if (ier) return -1;
+//    // VecOfSize3 *coordinates3;
+//    double *energy = nullptr;
+//    double *forces = nullptr;
+//
+//    auto ier = modelComputeArguments->GetArgumentPointer(
+//            KIM::COMPUTE_ARGUMENT_NAME::partialForces,
+//            (double const **) &forces)
+//               || modelComputeArguments->GetArgumentPointer(
+//            KIM::COMPUTE_ARGUMENT_NAME::partialEnergy,
+//            &energy);
+//    if (ier) return -1;
 //    modelObject->setDefaultInputs(modelComputeArguments);
 //    modelObject->torchModel->Run(modelComputeArguments, energy, forces);
-    modelObject->Run(modelComputeArguments, energy, forces);
+    modelObject->Run(modelComputeArguments);
 
-    return ier;
+//    return ier;
 }
 
 //******************************************************************************
@@ -208,12 +208,12 @@ int TorchMLModelDriver::ComputeArgumentsCreate(
 // *****************************************************************************
 // Auxiliary methods------------------------------------------------------------
 
-void TorchMLModelDriver::Run(const KIM::ModelComputeArguments *const modelComputeArguments,
-                             double * const energy, double * const forces) {
+void TorchMLModelDriver::Run(const KIM::ModelComputeArguments *const modelComputeArguments) {
+    c10::IValue out_tensor;
     preprocessInputs(modelComputeArguments);
-    torchModel->Run(energy, forces);
+    torchModel->Run(out_tensor);
     // torchModel->Run(torchOutputTensor);
-    // postprocessOutputs(torchOutputTensor, energy, forces);
+     postprocessOutputs(out_tensor, modelComputeArguments);
 }
 
 // -----------------------------------------------------------------------------
@@ -226,9 +226,92 @@ void TorchMLModelDriver::preprocessInputs(KIM::ModelComputeArguments const *cons
 }
 
 // -----------------------------------------------------------------------------
-void TorchMLModelDriver::postprocessOutputs(double *energy, double *forces) {
-    if (!returns_forces){
+void TorchMLModelDriver::postprocessOutputs(c10::IValue& out_tensor ,KIM::ModelComputeArguments const * modelComputeArguments) {
 
+    double *energy = nullptr;
+    double *forces = nullptr;
+    int const *numberOfParticlesPointer;
+    int *particleSpeciesCodes; // FIXME: Implement species code handling
+    int *particleContributing = nullptr;
+    double *coordinates = nullptr;
+
+    auto ier = modelComputeArguments->GetArgumentPointer(
+            KIM::COMPUTE_ARGUMENT_NAME::numberOfParticles,
+            &numberOfParticlesPointer)
+               || modelComputeArguments->GetArgumentPointer(
+            KIM::COMPUTE_ARGUMENT_NAME::particleSpeciesCodes,
+            &particleSpeciesCodes)
+               || modelComputeArguments->GetArgumentPointer(
+            KIM::COMPUTE_ARGUMENT_NAME::particleContributing,
+            &particleContributing)
+               || modelComputeArguments->GetArgumentPointer(
+            KIM::COMPUTE_ARGUMENT_NAME::coordinates,
+            (double const **) &coordinates)
+               || modelComputeArguments->GetArgumentPointer(
+            KIM::COMPUTE_ARGUMENT_NAME::partialForces,
+            (double const **) &forces)
+               || modelComputeArguments->GetArgumentPointer(
+            KIM::COMPUTE_ARGUMENT_NAME::partialEnergy,
+            &energy);
+
+    if (ier) return;
+
+    int contributing_atoms_count = 0;
+    for (int i = 0; i < *numberOfParticlesPointer; i++){
+        if (*(particleSpeciesCodes + i)==1){
+            contributing_atoms_count +=1;
+        }
+    }
+
+    if (returns_forces){
+        const auto output_tensor_list = out_tensor.toTuple()->elements();
+        *energy = *output_tensor_list[0].toTensor().to(torch::kCPU).data_ptr<double>();
+        auto torch_forces = output_tensor_list[1].toTensor().to(torch::kCPU);
+        auto force_accessor = torch_forces.accessor<double, 1>();
+        for (int atom_count = 0; atom_count < force_accessor.size(0); ++atom_count) {
+            forces[atom_count] = force_accessor[atom_count];
+        }
+    } else {
+        out_tensor.toTensor().backward();
+        c10::IValue input_tensor;
+        torchModel->GetInputNode(input_tensor);
+        auto input_grad = input_tensor.toTensor().grad();
+        *energy = *out_tensor.toTensor().to(torch::kCPU).data_ptr<double>();
+        int neigh_from = 0; int n_neigh = 0;
+        if (preprocessing == "Descriptor"){
+            // TODO this is temporary hard coded fix. Need to improve it by inheriting Base
+            // descriptor class in all descriptors. **Priority**
+            std::cout << "USING SYMUFUN WORKAROUND. FIX ME ASAP" <<"\n";
+            auto sf = reinterpret_cast<SymmetryFunctionParams *>(descriptor->descriptor_map["SymFun"]);
+            int width = sf->width;
+            //
+
+            auto option = torch::TensorOptions().dtype(torch::kFloat64);
+//            auto forces_tmp = torch::zeros({*numberOfParticlesPointer, 3});
+            for (int i = 0; i < contributing_atoms_count; i++){
+                n_neigh = num_neighbors_[i];
+                std::vector<int> n_list(neighbor_list.begin() + neigh_from, neighbor_list.begin() + n_neigh);
+                neigh_from += n_neigh;
+                grad_symmetry_function_atomic(i,
+                                          coordinates,
+                                          forces,
+                                          particleSpeciesCodes,
+                                          n_list.data(),
+                                          n_neigh,
+                                          input_tensor.toTensor().data_ptr<double>() + (i * width),
+                                          input_grad.data_ptr<double>() + (i * width),
+                                          sf);
+            }
+            for (int i = 0; i < *numberOfParticlesPointer; i++){
+                // forces = -grad
+                *(forces + i) *= -1.0;*(forces + i + 1) *= -1.0;*(forces + i + 2) *= -1.0;
+            }
+        } else {
+            auto force_accessor = input_grad.accessor<double, 1>();
+            for (int atom_count = 0; atom_count < force_accessor.size(0); ++atom_count) {
+                forces[atom_count] = -force_accessor[atom_count];
+            }
+        }
     }
 }
 

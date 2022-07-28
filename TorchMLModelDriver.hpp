@@ -66,7 +66,7 @@ public:
 
 private:
     MLModel *torchModel;
-    Descriptor *descriptor;
+//    Descriptor *descriptor;
     std::vector<int> num_neighbors_;
     std::vector<int> neighbor_list;
     int number_of_inputs;

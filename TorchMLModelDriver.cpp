@@ -211,12 +211,8 @@ int TorchMLModelDriver::ComputeArgumentsCreate(
 void TorchMLModelDriver::Run(const KIM::ModelComputeArguments *const modelComputeArguments) {
     c10::IValue out_tensor;
     preprocessInputs(modelComputeArguments);
-//    std::cout << "PREPROCESSED\n";
     torchModel->Run(out_tensor);
-//    std::cout << "RAN\n";
-    // torchModel->Run(torchOutputTensor);
-     postprocessOutputs(out_tensor, modelComputeArguments);
-//         std::cout << "POSTPROCESSED\n";
+    postprocessOutputs(out_tensor, modelComputeArguments);
 }
 
 // -----------------------------------------------------------------------------
@@ -224,9 +220,9 @@ void TorchMLModelDriver::preprocessInputs(KIM::ModelComputeArguments const *cons
     if (preprocessing == "None"){
         setDefaultInputs(modelComputeArguments);
     }
-//    else if (preprocessing == "Descriptor") {
-////        setDescriptorInputs(modelComputeArguments);
-//    }
+    else if (preprocessing == "Descriptor") {
+        setDescriptorInputs(modelComputeArguments);
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -268,60 +264,56 @@ void TorchMLModelDriver::postprocessOutputs(c10::IValue& out_tensor ,KIM::ModelC
     }
 
     if (returns_forces){
-//        std::cout << "Model Returns Forces:"<< returns_forces <<"\n";
         const auto output_tensor_list = out_tensor.toTuple()->elements();
         *energy = *output_tensor_list[0].toTensor().to(torch::kCPU).data_ptr<double>();
-//        std::cout << "Energy:" << *energy <<"\n";
         auto torch_forces = output_tensor_list[1].toTensor().to(torch::kCPU);
-//        std::cout << torch_forces ;
         auto force_accessor = torch_forces.accessor<double, 1>();
         for (int atom_count = 0; atom_count < force_accessor.size(0); ++atom_count) {
             forces[atom_count] = -force_accessor[atom_count];
         }
     }
-//    else {
-//        out_tensor.toTensor().backward();
-//        c10::IValue input_tensor;
-//        torchModel->GetInputNode(input_tensor);
-//        auto input_grad = input_tensor.toTensor().grad();
-//        *energy = *out_tensor.toTensor().to(torch::kCPU).data_ptr<double>();
-//        int neigh_from = 0; int n_neigh = 0;
-//        if (preprocessing == "Descriptor"){
-//            // TODO this is temporary hard coded fix. Need to improve it by inheriting Base
-//            // descriptor class in all descriptors. **Priority**
-//            std::cout << "USING SYMUFUN WORKAROUND. FIX ME ASAP" <<"\n";
-//            auto sf = reinterpret_cast<SymmetryFunctionParams *>(descriptor->descriptor_map["SymFun"]);
-//            int width = sf->width;
-//            //
-//
-//            auto option = torch::TensorOptions().dtype(torch::kFloat64);
-////            auto forces_tmp = torch::zeros({*numberOfParticlesPointer, 3});
-//            for (int i = 0; i < contributing_atoms_count; i++){
-//                n_neigh = num_neighbors_[i];
-//                std::vector<int> n_list(neighbor_list.begin() + neigh_from, neighbor_list.begin() + n_neigh);
-//                neigh_from += n_neigh;
-//                grad_symmetry_function_atomic(i,
-//                                          coordinates,
-//                                          forces,
-//                                          particleSpeciesCodes,
-//                                          n_list.data(),
-//                                          n_neigh,
-//                                          input_tensor.toTensor().data_ptr<double>() + (i * width),
-//                                          input_grad.data_ptr<double>() + (i * width),
-//                                          sf);
-//            }
-//            for (int i = 0; i < *numberOfParticlesPointer; i++){
-//                // forces = -grad
-//                *(forces + i) *= -1.0;*(forces + i + 1) *= -1.0;*(forces + i + 2) *= -1.0;
-//            }
-//        } else {
-//            auto force_accessor = input_grad.accessor<double, 1>();
-//            for (int atom_count = 0; atom_count < force_accessor.size(0); ++atom_count) {
-//                forces[atom_count] = -force_accessor[atom_count];
-//            }
-//        }
-//    }
-//std::cout << "GOING BACK\n";
+    else {
+        out_tensor.toTensor().backward();
+        c10::IValue input_tensor;
+        torchModel->GetInputNode(input_tensor);
+        auto input_grad = input_tensor.toTensor().grad();
+        *energy = *out_tensor.toTensor().to(torch::kCPU).data_ptr<double>();
+        int neigh_from = 0; int n_neigh = 0;
+        if (preprocessing == "Descriptor"){
+            // TODO this is temporary hard coded fix. Need to improve it by inheriting Base
+            // descriptor class in all descriptors. **Priority**
+            std::cout << "USING SYMUFUN WORKAROUND. FIX ME ASAP" <<"\n";
+            auto sf = reinterpret_cast<SymmetryFunctionParams *>(descriptor->descriptor_map["SymFun"]);
+            int width = sf->width;
+            //
+
+            auto option = torch::TensorOptions().dtype(torch::kFloat64);
+            // auto forces_tmp = torch::zeros({*numberOfParticlesPointer, 3});
+            for (int i = 0; i < contributing_atoms_count; i++){
+                n_neigh = num_neighbors_[i];
+                std::vector<int> n_list(neighbor_list.begin() + neigh_from, neighbor_list.begin() + n_neigh);
+                neigh_from += n_neigh;
+                grad_symmetry_function_atomic(i,
+                                          coordinates,
+                                          forces,
+                                          particleSpeciesCodes,
+                                          n_list.data(),
+                                          n_neigh,
+                                          input_tensor.toTensor().data_ptr<double>() + (i * width),
+                                          input_grad.data_ptr<double>() + (i * width),
+                                          sf);
+            }
+            for (int i = 0; i < *numberOfParticlesPointer; i++){
+                // forces = -grad
+                *(forces + i) *= -1.0;*(forces + i + 1) *= -1.0;*(forces + i + 2) *= -1.0;
+            }
+        } else {
+            auto force_accessor = input_grad.accessor<double, 1>();
+            for (int atom_count = 0; atom_count < force_accessor.size(0); ++atom_count) {
+                forces[atom_count] = -force_accessor[atom_count];
+            }
+        }
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -331,14 +323,12 @@ void TorchMLModelDriver::updateNeighborList(KIM::ModelComputeArguments const *co
     int const *neighbors;
     num_neighbors_.clear();
     neighbor_list.clear();
-//    std::cout << "UPDATING NEIGHBOURS\n";
     for (int i = 0; i < numberOfParticles; i++) {
         modelComputeArguments->GetNeighborList(0,
                                                i,
                                                &numOfNeighbors,
                                                &neighbors);
         num_neighbors_.push_back(numOfNeighbors);
-//        std::cout << numOfNeighbors <<"  \n";
         for (int neigh = 0; neigh < numOfNeighbors; neigh++) {
             neighbor_list.push_back(neighbors[neigh]);
         }
@@ -367,83 +357,77 @@ void TorchMLModelDriver::setDefaultInputs(const KIM::ModelComputeArguments *mode
                || modelComputeArguments->GetArgumentPointer(
             KIM::COMPUTE_ARGUMENT_NAME::coordinates,
             (double const **) &coordinates);
-//    std::cout << "ier " <<ier<<"\n";
     if (ier) {
         LOG_ERROR("Could not create model compute arguments input @ setDefaultInputs");
         return;
     }
     int const numberOfParticles = *numberOfParticlesPointer;
 
-//    std::cout << numberOfParticles <<"\n";
     torchModel->SetInputNode(0, particleContributing, numberOfParticles);
-//    std::cout << coordinates[0] <<"\n";
     torchModel->SetInputNode(1, coordinates, 3 * numberOfParticles, true);
 
     updateNeighborList(modelComputeArguments, numberOfParticles);
-//    std::cout << num_neighbors_[22] <<"\n";
     torchModel->SetInputNode(2, num_neighbors_.data(), static_cast<int>(num_neighbors_.size()));
-//    std::cout << neighbor_list[0] <<neighbor_list[2] <<"\n";
     torchModel->SetInputNode(3, neighbor_list.data(), static_cast<int>(neighbor_list.size()));
 }
 
 // -----------------------------------------------------------------------------
-//#undef KIM_LOGGER_OBJECT_NAME
-//#define KIM_LOGGER_OBJECT_NAME modelComputeArguments
-//
-//void TorchMLModelDriver::setDescriptorInputs(const KIM::ModelComputeArguments *modelComputeArguments) {
-//    int const *numberOfParticlesPointer;
-//    int *particleSpeciesCodes; // FIXME: Implement species code handling
-//    int *particleContributing = nullptr;
-//    double *coordinates = nullptr;
-//    std::cout << "AM I HERE?\n";
-////    auto ier = modelComputeArguments->GetArgumentPointer(
-////            KIM::COMPUTE_ARGUMENT_NAME::numberOfParticles,
-////            &numberOfParticlesPointer)
-////               || modelComputeArguments->GetArgumentPointer(
-////            KIM::COMPUTE_ARGUMENT_NAME::particleSpeciesCodes,
-////            &particleSpeciesCodes)
-////               || modelComputeArguments->GetArgumentPointer(
-////            KIM::COMPUTE_ARGUMENT_NAME::particleContributing,
-////            &particleContributing)
-////               || modelComputeArguments->GetArgumentPointer(
-////            KIM::COMPUTE_ARGUMENT_NAME::coordinates,
-////            (double const **) &coordinates);
-////    LOG_ERROR("Could not create model compute arguments input @ setDefaultInputs");
-////    if (ier) return;
-////    int neigh_from, n_neigh;
-////    neigh_from = 0; n_neigh = 0;
-////
-////    int contributing_atoms_count = 0;
-////    for (int i = 0; i < *numberOfParticlesPointer; i++){
-////        if (*(particleSpeciesCodes + i)==1){
-////            contributing_atoms_count +=1;
-////        }
-////    }
-////
-////    // Initialize descriptors on the basis of function
-////    auto option = torch::TensorOptions().dtype(torch::kFloat64).requires_grad(true);
-////
-////    // TODO this is temporary hard coded fix. Need to improve it by inheriting Base
-////    // descriptor class in all descriptors. **Priority**
-////    std::cout << "USING SYMUFUN WORKAROUND. FIX ME ASAP" <<"\n";
-////    auto sf = reinterpret_cast<SymmetryFunctionParams *>(descriptor->descriptor_map["SymFun"]);
-////    int width = sf->width;
-////    //
-////
-////    updateNeighborList(modelComputeArguments, *numberOfParticlesPointer);
-////
-////    double * descriptor_array = new double [contributing_atoms_count * width];
-////    for (int i = 0; i < contributing_atoms_count; i++){
-////        for (int j = i * width; j < (i + 1) * width; j++){descriptor_array[j] = 0.;}
-////        n_neigh =  num_neighbors_[i];
-////        std::vector<int> n_list(neighbor_list.begin() + neigh_from, neighbor_list.begin() + n_neigh);
-////        neigh_from += n_neigh;
-////        symmetry_function_atomic(i, coordinates, particleSpeciesCodes,
-////                                     n_list.data(),n_neigh, descriptor_array + (i * width), sf);
-////    }
-//////    auto descriptor_tensor = torch::from_blob(descriptor_array, {contributing_atoms_count, width}, option);
-////    torchModel->SetInputNode(0,descriptor_array,contributing_atoms_count,true);
-//}
+#undef KIM_LOGGER_OBJECT_NAME
+#define KIM_LOGGER_OBJECT_NAME modelComputeArguments
+
+void TorchMLModelDriver::setDescriptorInputs(const KIM::ModelComputeArguments *modelComputeArguments) {
+    int const *numberOfParticlesPointer;
+    int *particleSpeciesCodes; // FIXME: Implement species code handling
+    int *particleContributing = nullptr;
+    double *coordinates = nullptr;
+    auto ier = modelComputeArguments->GetArgumentPointer(
+            KIM::COMPUTE_ARGUMENT_NAME::numberOfParticles,
+            &numberOfParticlesPointer)
+               || modelComputeArguments->GetArgumentPointer(
+            KIM::COMPUTE_ARGUMENT_NAME::particleSpeciesCodes,
+            &particleSpeciesCodes)
+               || modelComputeArguments->GetArgumentPointer(
+            KIM::COMPUTE_ARGUMENT_NAME::particleContributing,
+            &particleContributing)
+               || modelComputeArguments->GetArgumentPointer(
+            KIM::COMPUTE_ARGUMENT_NAME::coordinates,
+            (double const **) &coordinates);
+    LOG_ERROR("Could not create model compute arguments input @ setDefaultInputs");
+    if (ier) return;
+    int neigh_from, n_neigh;
+    neigh_from = 0; n_neigh = 0;
+
+    int contributing_atoms_count = 0;
+    for (int i = 0; i < *numberOfParticlesPointer; i++){
+        if (*(particleSpeciesCodes + i)==1){
+            contributing_atoms_count +=1;
+        }
+    }
+
+    // Initialize descriptors on the basis of function
+    auto option = torch::TensorOptions().dtype(torch::kFloat64).requires_grad(true);
+
+    // TODO this is temporary hard coded fix. Need to improve it by inheriting Base
+    // descriptor class in all descriptors. **Priority**
+    std::cout << "USING SYMUFUN WORKAROUND. FIX ME ASAP" <<"\n";
+    auto sf = reinterpret_cast<SymmetryFunctionParams *>(descriptor->descriptor_map["SymFun"]);
+    int width = sf->width;
+    //
+
+    updateNeighborList(modelComputeArguments, *numberOfParticlesPointer);
+
+    double * descriptor_array = new double [contributing_atoms_count * width];
+    for (int i = 0; i < contributing_atoms_count; i++){
+        for (int j = i * width; j < (i + 1) * width; j++){descriptor_array[j] = 0.;}
+        n_neigh =  num_neighbors_[i];
+        std::vector<int> n_list(neighbor_list.begin() + neigh_from, neighbor_list.begin() + n_neigh);
+        neigh_from += n_neigh;
+        symmetry_function_atomic(i, coordinates, particleSpeciesCodes,
+                                     n_list.data(),n_neigh, descriptor_array + (i * width), sf);
+    }
+//    auto descriptor_tensor = torch::from_blob(descriptor_array, {contributing_atoms_count, width}, option);
+    torchModel->SetInputNode(0,descriptor_array,contributing_atoms_count,true);
+}
 
 // --------------------------------------------------------------------------------
 #undef KIM_LOGGER_OBJECT_NAME

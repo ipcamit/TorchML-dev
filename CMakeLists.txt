@@ -3,7 +3,19 @@ cmake_minimum_required(VERSION 3.10)
 # Need these packages on my laptop
 # TODO find more agnostic way for it. Discuss with Ryan?
 find_package(EnvModules REQUIRED)
-env_module(load kim_api)
+
+if (CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "DEBUG")
+    message("LOADING DEBUG CONFIG")
+    env_module(load kim_api_debug)
+    # Uncomment for enabling libasan
+    # Also export LD_PRELOAD as `export LD_PRELOAD = $LD_PRELOAD":/lib/x86_64-linux-gnu/libasan.so.5"`
+    # env_module(load kim_api_asan)
+    # add_compile_options(-fsanitize=address)
+    # add_link_options(-fsanitize=address)
+elseif(CMAKE_BUILD_TYPE STREQUAL "Release" OR CMAKE_BUILD_TYPE STREQUAL "RELEASE")
+    message("LOADING RELEASE CONFIG")
+    env_module(load kim_api)
+endif()
 env_module(load libtorch110)
 
 list(APPEND CMAKE_PREFIX_PATH $ENV{KIM_API_CMAKE_PREFIX_DIR})
@@ -27,8 +39,7 @@ add_kim_api_model_driver_library(
   CREATE_ROUTINE_LANGUAGE "cpp"
 )
 
-include_directories(../colabfit-descriptor-library)
-#link_directories(../colabfit-descriptor-library/cmake-build-debug-clang12)
+include_directories(/home/amit/Projects/COLABFIT/colabfit-kim-model/colabfit-descriptor-library)
 SET(CMAKE_SKIP_BUILD_RPATH  FALSE)
 
 # TODO re-enable subdirectory for ML model, as otherwise compilation is lot slower
@@ -37,12 +48,9 @@ SET(CMAKE_SKIP_BUILD_RPATH  FALSE)
 target_sources(${PROJECT_NAME} PRIVATE
         TorchMLModelDriver.cpp
         MLModel.cpp
-#        ../colabfit-descriptor-library/cmake-build-debug-clang12/libdescriptor.so
-#        TorchMLModelImplementation.cpp
 )
 
 # Suppress annoying Variable not used warnings, parameter still warns :(
 add_compile_options(-Wno-unused-variable -Wno-unused-parameter)
-find_library(DESC_LIB descriptor HINTS ../colabfit-descriptor-library/cmake-build-debug-clang12)
+find_library(DESC_LIB descriptor HINTS /home/amit/Projects/COLABFIT/colabfit-kim-model/colabfit-descriptor-library/cmake-build-debug-clang12)
 target_link_libraries("${PROJECT_NAME}" PRIVATE ${TORCH_LIBRARIES} ${DESC_LIB})
-#target_link_libraries(${PROJECT_NAME} SHARED libdescriptor)

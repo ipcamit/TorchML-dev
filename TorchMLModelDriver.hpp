@@ -75,7 +75,7 @@ private:
     void updateNeighborList(KIM::ModelComputeArguments const *modelComputeArguments, int numberOfParticles);
 
     void setDefaultInputs(const KIM::ModelComputeArguments * modelComputeArguments);
-//    void setDescriptorInputs(const KIM::ModelComputeArguments * modelComputeArguments);
+    void setDescriptorInputs(const KIM::ModelComputeArguments * modelComputeArguments);
 
     void readParameters(KIM::ModelDriverCreate *modelDriverCreate, int *ier);
 

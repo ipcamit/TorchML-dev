@@ -118,13 +118,12 @@ TorchMLModelDriver::TorchMLModelDriver(
                                        KIM::TIME_UNIT::unused);
 
     // Set preprocessor descriptor callbacks --------------------------------------------------
-//    if (preprocessing == "Descriptor"){
-//        //TODO delete allocation
-//        descriptor = new Descriptor(descriptor_name, descriptor_param_file);
-//    } else {
-//        descriptor = nullptr;
-//    }
-
+    if (preprocessing == "Descriptor"){
+        //TODO delete allocation
+        descriptor = new Descriptor(descriptor_name, descriptor_param_file);
+    } else {
+        descriptor = nullptr;
+    }
 }
 
 //******************************************************************************
@@ -162,7 +161,7 @@ int TorchMLModelDriver::Compute(
 //    // VecOfSize3 *coordinates3;
 //    double *energy = nullptr;
 //    double *forces = nullptr;
-//
+////
 //    auto ier = modelComputeArguments->GetArgumentPointer(
 //            KIM::COMPUTE_ARGUMENT_NAME::partialForces,
 //            (double const **) &forces)
@@ -173,8 +172,8 @@ int TorchMLModelDriver::Compute(
 //    modelObject->setDefaultInputs(modelComputeArguments);
 //    modelObject->torchModel->Run(modelComputeArguments, energy, forces);
     modelObject->Run(modelComputeArguments);
-    std::cout << "COMPUTED\n";
-//    return ier;
+    // TODO see proper way to return error codes
+    return false;
 }
 
 //******************************************************************************
@@ -212,12 +211,12 @@ int TorchMLModelDriver::ComputeArgumentsCreate(
 void TorchMLModelDriver::Run(const KIM::ModelComputeArguments *const modelComputeArguments) {
     c10::IValue out_tensor;
     preprocessInputs(modelComputeArguments);
-    std::cout << "PREPROCESSED\n";
+//    std::cout << "PREPROCESSED\n";
     torchModel->Run(out_tensor);
-    std::cout << "RAN\n";
+//    std::cout << "RAN\n";
     // torchModel->Run(torchOutputTensor);
      postprocessOutputs(out_tensor, modelComputeArguments);
-         std::cout << "POSTPROCESSED\n";
+//         std::cout << "POSTPROCESSED\n";
 }
 
 // -----------------------------------------------------------------------------
@@ -269,10 +268,10 @@ void TorchMLModelDriver::postprocessOutputs(c10::IValue& out_tensor ,KIM::ModelC
     }
 
     if (returns_forces){
-        std::cout << "Model Returns Forces:"<< returns_forces <<"\n";
+//        std::cout << "Model Returns Forces:"<< returns_forces <<"\n";
         const auto output_tensor_list = out_tensor.toTuple()->elements();
         *energy = *output_tensor_list[0].toTensor().to(torch::kCPU).data_ptr<double>();
-        std::cout << "Energy:" << *energy <<"\n";
+//        std::cout << "Energy:" << *energy <<"\n";
         auto torch_forces = output_tensor_list[1].toTensor().to(torch::kCPU);
 //        std::cout << torch_forces ;
         auto force_accessor = torch_forces.accessor<double, 1>();
@@ -322,7 +321,7 @@ void TorchMLModelDriver::postprocessOutputs(c10::IValue& out_tensor ,KIM::ModelC
 //            }
 //        }
 //    }
-std::cout << "GOING BACK\n";
+//std::cout << "GOING BACK\n";
 }
 
 // -----------------------------------------------------------------------------
@@ -332,7 +331,7 @@ void TorchMLModelDriver::updateNeighborList(KIM::ModelComputeArguments const *co
     int const *neighbors;
     num_neighbors_.clear();
     neighbor_list.clear();
-    std::cout << "UPDATING NEIGHBOURS\n";
+//    std::cout << "UPDATING NEIGHBOURS\n";
     for (int i = 0; i < numberOfParticles; i++) {
         modelComputeArguments->GetNeighborList(0,
                                                i,
@@ -342,9 +341,6 @@ void TorchMLModelDriver::updateNeighborList(KIM::ModelComputeArguments const *co
 //        std::cout << numOfNeighbors <<"  \n";
         for (int neigh = 0; neigh < numOfNeighbors; neigh++) {
             neighbor_list.push_back(neighbors[neigh]);
-            if (i==1){
-                std::cout << " **** " << neighbors[neigh] ;
-            }
         }
     }
 }
@@ -371,22 +367,22 @@ void TorchMLModelDriver::setDefaultInputs(const KIM::ModelComputeArguments *mode
                || modelComputeArguments->GetArgumentPointer(
             KIM::COMPUTE_ARGUMENT_NAME::coordinates,
             (double const **) &coordinates);
-    std::cout << "ier " <<ier<<"\n";
+//    std::cout << "ier " <<ier<<"\n";
     if (ier) {
         LOG_ERROR("Could not create model compute arguments input @ setDefaultInputs");
         return;
     }
     int const numberOfParticles = *numberOfParticlesPointer;
 
-    std::cout << numberOfParticles <<"\n";
+//    std::cout << numberOfParticles <<"\n";
     torchModel->SetInputNode(0, particleContributing, numberOfParticles);
-    std::cout << coordinates[0] <<"\n";
+//    std::cout << coordinates[0] <<"\n";
     torchModel->SetInputNode(1, coordinates, 3 * numberOfParticles, true);
 
     updateNeighborList(modelComputeArguments, numberOfParticles);
-    std::cout << num_neighbors_[22] <<"\n";
+//    std::cout << num_neighbors_[22] <<"\n";
     torchModel->SetInputNode(2, num_neighbors_.data(), static_cast<int>(num_neighbors_.size()));
-    std::cout << neighbor_list[0] <<neighbor_list[2] <<"\n";
+//    std::cout << neighbor_list[0] <<neighbor_list[2] <<"\n";
     torchModel->SetInputNode(3, neighbor_list.data(), static_cast<int>(neighbor_list.size()));
 }
 

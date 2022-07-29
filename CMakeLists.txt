@@ -37,12 +37,12 @@ SET(CMAKE_SKIP_BUILD_RPATH  FALSE)
 target_sources(${PROJECT_NAME} PRIVATE
         TorchMLModelDriver.cpp
         MLModel.cpp
-        ../colabfit-descriptor-library/cmake-build-debug-clang12/libdescriptor.so
+#        ../colabfit-descriptor-library/cmake-build-debug-clang12/libdescriptor.so
 #        TorchMLModelImplementation.cpp
 )
 
 # Suppress annoying Variable not used warnings, parameter still warns :(
 add_compile_options(-Wno-unused-variable -Wno-unused-parameter)
-#find_library(DESC_LIB descriptor HINTS ../colabfit-descriptor-library/cmake-build-debug-clang12)
-target_link_libraries("${PROJECT_NAME}" PRIVATE ${TORCH_LIBRARIES})
+find_library(DESC_LIB descriptor HINTS ../colabfit-descriptor-library/cmake-build-debug-clang12)
+target_link_libraries("${PROJECT_NAME}" PRIVATE ${TORCH_LIBRARIES} ${DESC_LIB})
 #target_link_libraries(${PROJECT_NAME} SHARED libdescriptor)

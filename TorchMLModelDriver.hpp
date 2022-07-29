@@ -12,7 +12,7 @@
 #include "MLModel.hpp"
 #include "descriptors.hpp"
 //TODO Remove the SYMFUN calls below. only for temp workaround
-#include "SymFun/SymFun.hpp"
+//#include "SymFun/SymFun.hpp"
 #include <torch/torch.h>
 
 extern "C" {
@@ -66,7 +66,7 @@ public:
 
 private:
     MLModel *torchModel;
-//    Descriptor *descriptor;
+    Descriptor *descriptor;
     std::vector<int> num_neighbors_;
     std::vector<int> neighbor_list;
     int number_of_inputs;
@@ -75,7 +75,7 @@ private:
     void updateNeighborList(KIM::ModelComputeArguments const *modelComputeArguments, int numberOfParticles);
 
     void setDefaultInputs(const KIM::ModelComputeArguments * modelComputeArguments);
-    void setDescriptorInputs(const KIM::ModelComputeArguments * modelComputeArguments);
+//    void setDescriptorInputs(const KIM::ModelComputeArguments * modelComputeArguments);
 
     void readParameters(KIM::ModelDriverCreate *modelDriverCreate, int *ier);
 

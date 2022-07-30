@@ -156,21 +156,7 @@ int TorchMLModelDriver::Compute(
         KIM::ModelComputeArguments const *const modelComputeArguments) {
 
     TorchMLModelDriver *modelObject;
-    modelCompute->GetModelBufferPointer(reinterpret_cast<void **>(&modelObject));
-
-//    // VecOfSize3 *coordinates3;
-//    double *energy = nullptr;
-//    double *forces = nullptr;
-////
-//    auto ier = modelComputeArguments->GetArgumentPointer(
-//            KIM::COMPUTE_ARGUMENT_NAME::partialForces,
-//            (double const **) &forces)
-//               || modelComputeArguments->GetArgumentPointer(
-//            KIM::COMPUTE_ARGUMENT_NAME::partialEnergy,
-//            &energy);
-//    if (ier) return -1;
-//    modelObject->setDefaultInputs(modelComputeArguments);
-//    modelObject->torchModel->Run(modelComputeArguments, energy, forces);
+    modelCompute->GetModelBufferPointer(reinterpret_cast<void **>(&modelObject));;
     modelObject->Run(modelComputeArguments);
     // TODO see proper way to return error codes
     return false;
@@ -258,7 +244,7 @@ void TorchMLModelDriver::postprocessOutputs(c10::IValue& out_tensor ,KIM::ModelC
 
     int contributing_atoms_count = 0;
     for (int i = 0; i < *numberOfParticlesPointer; i++){
-        if (*(particleSpeciesCodes + i)==1){
+        if (*(particleContributing + i)==1){
             contributing_atoms_count +=1;
         }
     }
@@ -273,7 +259,8 @@ void TorchMLModelDriver::postprocessOutputs(c10::IValue& out_tensor ,KIM::ModelC
         }
     }
     else {
-        out_tensor.toTensor().backward();
+        std::cout << "SUMMING UP ENERGIES. THIS WILL BE REMOVED. SUM YOUR OWN ENERGIES\n";
+        out_tensor.toTensor().sum().backward();
         c10::IValue input_tensor;
         torchModel->GetInputNode(input_tensor);
         auto input_grad = input_tensor.toTensor().grad();
@@ -283,15 +270,12 @@ void TorchMLModelDriver::postprocessOutputs(c10::IValue& out_tensor ,KIM::ModelC
             // TODO this is temporary hard coded fix. Need to improve it by inheriting Base
             // descriptor class in all descriptors. **Priority**
             std::cout << "USING SYMUFUN WORKAROUND. FIX ME ASAP" <<"\n";
-            auto sf = reinterpret_cast<SymmetryFunctionParams *>(descriptor->descriptor_map["SymFun"]);
+            auto sf = reinterpret_cast<SymmetryFunctionParams *>(descriptor->descriptor_map["SymmetryFunction"]);
             int width = sf->width;
             //
-
-            auto option = torch::TensorOptions().dtype(torch::kFloat64);
-            // auto forces_tmp = torch::zeros({*numberOfParticlesPointer, 3});
             for (int i = 0; i < contributing_atoms_count; i++){
                 n_neigh = num_neighbors_[i];
-                std::vector<int> n_list(neighbor_list.begin() + neigh_from, neighbor_list.begin() + n_neigh);
+                std::vector<int> n_list(neighbor_list.begin() + neigh_from, neighbor_list.begin() + neigh_from + n_neigh);
                 neigh_from += n_neigh;
                 grad_symmetry_function_atomic(i,
                                           coordinates,
@@ -305,7 +289,7 @@ void TorchMLModelDriver::postprocessOutputs(c10::IValue& out_tensor ,KIM::ModelC
             }
             for (int i = 0; i < *numberOfParticlesPointer; i++){
                 // forces = -grad
-                *(forces + i) *= -1.0;*(forces + i + 1) *= -1.0;*(forces + i + 2) *= -1.0;
+                *(forces + i) *= -1.0; *(forces + i + 1) *= -1.0; *(forces + i + 2) *= -1.0;
             }
         } else {
             auto force_accessor = input_grad.accessor<double, 1>();
@@ -392,25 +376,25 @@ void TorchMLModelDriver::setDescriptorInputs(const KIM::ModelComputeArguments *m
                || modelComputeArguments->GetArgumentPointer(
             KIM::COMPUTE_ARGUMENT_NAME::coordinates,
             (double const **) &coordinates);
-    LOG_ERROR("Could not create model compute arguments input @ setDefaultInputs");
-    if (ier) return;
+    if (ier) {
+        LOG_ERROR("Could not create model compute arguments input @ setDefaultInputs");
+        return; }
     int neigh_from, n_neigh;
     neigh_from = 0; n_neigh = 0;
 
     int contributing_atoms_count = 0;
     for (int i = 0; i < *numberOfParticlesPointer; i++){
-        if (*(particleSpeciesCodes + i)==1){
+        if (*(particleContributing + i)==1){
             contributing_atoms_count +=1;
         }
     }
-
     // Initialize descriptors on the basis of function
     auto option = torch::TensorOptions().dtype(torch::kFloat64).requires_grad(true);
 
     // TODO this is temporary hard coded fix. Need to improve it by inheriting Base
     // descriptor class in all descriptors. **Priority**
     std::cout << "USING SYMUFUN WORKAROUND. FIX ME ASAP" <<"\n";
-    auto sf = reinterpret_cast<SymmetryFunctionParams *>(descriptor->descriptor_map["SymFun"]);
+    auto sf = reinterpret_cast<SymmetryFunctionParams *>(descriptor->descriptor_map["SymmetryFunction"]);
     int width = sf->width;
     //
 
@@ -420,13 +404,20 @@ void TorchMLModelDriver::setDescriptorInputs(const KIM::ModelComputeArguments *m
     for (int i = 0; i < contributing_atoms_count; i++){
         for (int j = i * width; j < (i + 1) * width; j++){descriptor_array[j] = 0.;}
         n_neigh =  num_neighbors_[i];
-        std::vector<int> n_list(neighbor_list.begin() + neigh_from, neighbor_list.begin() + n_neigh);
+        std::vector<int> n_list(neighbor_list.begin() + neigh_from, neighbor_list.begin() + neigh_from + n_neigh);
         neigh_from += n_neigh;
-        symmetry_function_atomic(i, coordinates, particleSpeciesCodes,
-                                     n_list.data(),n_neigh, descriptor_array + (i * width), sf);
+        symmetry_function_atomic(i,
+                                 coordinates,
+                                 particleSpeciesCodes,
+                                 n_list.data(),
+                                 n_neigh,
+                                 descriptor_array + (i * width),
+                                 sf);
     }
-//    auto descriptor_tensor = torch::from_blob(descriptor_array, {contributing_atoms_count, width}, option);
-    torchModel->SetInputNode(0,descriptor_array,contributing_atoms_count,true);
+    // auto descriptor_tensor = torch::from_blob(descriptor_array, {contributing_atoms_count, width}, option);
+
+    std::vector<int> input_tensor_size({contributing_atoms_count, width});
+    torchModel->SetInputNode(0,descriptor_array,input_tensor_size,true);
 }
 
 // --------------------------------------------------------------------------------

@@ -102,13 +102,11 @@ void PytorchModel::SetInputNode(int model_input_index, double *input, std::vecto
     torch::TensorOptions tensor_options =
             torch::TensorOptions().dtype(torch_dtype).requires_grad(requires_grad);
 
-    // Finally, create the input tensor and store it on the relevant MLModel
-    // attr
+    // Finally, create the input tensor and store it on the relevant MLModel attr
     std::vector<int64_t> size_t;
     for (auto val: size) size_t.push_back(static_cast<int64_t>(val));
     torch::Tensor input_tensor =
             torch::from_blob(input, size_t, tensor_options).to(*device_);
-
     model_inputs_[model_input_index] = input_tensor;
 }
 

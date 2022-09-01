@@ -28,8 +28,8 @@ int model_driver_create(KIM::ModelDriverCreate *modelDriverCreate,
 
 class TorchMLModelDriver {
 public:
-    double influence_distance;
-    int n_elements;
+    double influence_distance, cutoff_distance;
+    int n_elements, n_layers;
     std::vector<std::string> elements_list;
     std::string preprocessing;
     std::string model_name;
@@ -44,7 +44,7 @@ public:
                        KIM::TemperatureUnit requestedTemperatureUnit,
                        KIM::TimeUnit requestedTimeUnit,
                        int *ier);
-//  ~TorchMLModelDriver();
+  ~TorchMLModelDriver();
 
     // no need to make these "extern" since KIM will only access them
     // via function pointers.  "static" is required so that there is not
@@ -70,12 +70,13 @@ private:
     std::vector<int> num_neighbors_;
     std::vector<int> neighbor_list;
     int number_of_inputs;
-
+    double * descriptor_array;
 
     void updateNeighborList(KIM::ModelComputeArguments const *modelComputeArguments, int numberOfParticles);
 
     void setDefaultInputs(const KIM::ModelComputeArguments * modelComputeArguments);
     void setDescriptorInputs(const KIM::ModelComputeArguments * modelComputeArguments);
+    void setGraphInputs(const KIM::ModelComputeArguments * modelComputeArguments);
 
     void readParameters(KIM::ModelDriverCreate *modelDriverCreate, int *ier);
 

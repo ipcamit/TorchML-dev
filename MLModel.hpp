@@ -41,6 +41,9 @@ public:
     virtual void SetInputNode(int /*model_input_index*/, double * /*input*/,
                       std::vector<int>& /*arb size*/, bool requires_grad = false) = 0;
 
+    virtual void SetInputNode(int /*model_input_index*/, int /*layer number*/,
+                              int /*size of graph edge index*/ , int **) = 0;
+
     virtual void GetInputNode(int /*model_input_index*/, c10::IValue &) = 0;
     virtual void GetInputNode( c10::IValue &) = 0;
 
@@ -80,6 +83,9 @@ public:
 
     void SetInputNode(int /*model_input_index*/, double * /*input*/,
                       std::vector<int>& /*arb size*/, bool requires_grad = false);
+
+    void SetInputNode(int /*model_input_index*/, int /*layer number*/,
+                      int /*size of graph edge index*/ , int **);
 
     void GetInputNode(int /*model_input_index*/, c10::IValue &);
     void GetInputNode(c10::IValue &);

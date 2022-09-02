@@ -110,6 +110,16 @@ void PytorchModel::SetInputNode(int model_input_index, double *input, std::vecto
     model_inputs_[model_input_index] = input_tensor;
 }
 
+void PytorchModel::SetInputNode(int model_input_index, int layer,
+                                int size, int ** const unrolled_graph) {
+    int * edge_index_array = unrolled_graph[layer];
+    torch::Dtype torch_dtype = get_torch_data_type(edge_index_array);
+    torch::TensorOptions tensor_options = torch::TensorOptions().dtype(torch_dtype);
+    torch::Tensor edge_index =
+            torch::from_blob(edge_index_array,{2,size},tensor_options).to(*device_);
+    model_inputs_[model_input_index] = edge_index;
+};
+
 
 void PytorchModel::Run(c10::IValue& out_tensor) {
     // FIXME: Make this work for arbitrary number/type of outputs?  This may

@@ -71,6 +71,7 @@ private:
     std::vector<int> neighbor_list;
     int number_of_inputs;
     double * descriptor_array;
+    int ** graph_edge_indices;
 
     void updateNeighborList(KIM::ModelComputeArguments const *modelComputeArguments, int numberOfParticles);
 
@@ -94,6 +95,7 @@ private:
     void preprocessInputs(KIM::ModelComputeArguments const *modelComputeArguments);
     void postprocessOutputs(c10::IValue&, KIM::ModelComputeArguments const *);
     void Run(KIM::ModelComputeArguments const *modelComputeArguments);
+    void graph_set_to_graph_array(std::vector<std::set<std::tuple<int, int> > > &);
     // TorchMLModelImplementation * implementation_;
 };
 

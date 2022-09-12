@@ -510,6 +510,12 @@ void TorchMLModelDriver::setGraphInputs(const KIM::ModelComputeArguments *modelC
     for (int i = 0; i < n_layers; i++) {
         torchModel->SetInputNode(2 + i, i, static_cast<int>(unrolled_graph[i].size()), graph_edge_indices);
     }
+
+    int * contraction_array = new int[*numberOfParticlesPointer];
+    for (int i = 0; i < *numberOfParticlesPointer; i++){
+        contraction_array[i] = (i > contributing_atoms_count)? 0 : 1;
+    }
+    torchModel->SetInputNode(2 + n_layers, contraction_array, *numberOfParticlesPointer, false);
 }
 
 // --------------------------------------------------------------------------------

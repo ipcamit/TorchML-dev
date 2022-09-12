@@ -6,6 +6,8 @@
 #include <string>
 
 #include <torch/script.h>
+#include <torchscatter/scatter.h>
+#include <torchsparse/sparse.h>
 
 // TODO Specify kind of models and enumerate
 // Basic kind I can think of

@@ -1,0 +1,4 @@
+export INCLUDE="${INCLUDE}:/home/amit/Projects/COLABFIT/colabfit-kim-model/colabfit-model-driver/torch_geometric_dependencies/install/include"
+export LD_LIBRRAY_PATH="${LD_LIBRARY_PATH}:/home/amit/Projects/COLABFIT/colabfit-kim-model/colabfit-model-driver/torch_geometric_dependencies/install/lib"
+export TorchScatter_DIR="/home/amit/Projects/COLABFIT/colabfit-kim-model/colabfit-model-driver/torch_geometric_dependencies/install/share/cmake"
+export TorchSparse_DIR="/home/amit/Projects/COLABFIT/colabfit-kim-model/colabfit-model-driver/torch_geometric_dependencies/install/share/cmake"

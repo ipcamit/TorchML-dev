@@ -75,6 +75,23 @@ void PytorchModel::SetInputNode(int model_input_index, int *input, int size,
     model_inputs_[model_input_index] = input_tensor;
 }
 
+void PytorchModel::SetInputNode(int model_input_index, int64_t *input, int size,
+                                bool requires_grad) {
+    // Map C++ data type used for the input here into the appropriate
+    // fixed-width torch data type
+    torch::Dtype torch_dtype = torch::kInt64;//get_torch_data_type(input);
+
+    // FIXME: Determine device to create tensor on
+    torch::TensorOptions tensor_options =
+            torch::TensorOptions().dtype(torch_dtype).requires_grad(requires_grad);
+
+    // Finally, create the input tensor and store it on the relevant MLModel
+    // attr
+    torch::Tensor input_tensor =
+            torch::from_blob(input, {size}, tensor_options).to(*device_);
+    model_inputs_[model_input_index] = input_tensor;
+}
+
 void PytorchModel::SetInputNode(int model_input_index, double *input, int size,
                                 bool requires_grad) {
     // Map C++ data type used for the input here into the appropriate
@@ -111,9 +128,9 @@ void PytorchModel::SetInputNode(int model_input_index, double *input, std::vecto
 }
 
 void PytorchModel::SetInputNode(int model_input_index, int layer,
-                                int size, int ** const unrolled_graph) {
-    int * edge_index_array = unrolled_graph[layer];
-    torch::Dtype torch_dtype = get_torch_data_type(edge_index_array);
+                                int size, long ** const unrolled_graph) {
+    long * edge_index_array = unrolled_graph[layer];
+    torch::Dtype torch_dtype = torch::kLong;//get_torch_data_type(edge_index_array);
     torch::TensorOptions tensor_options = torch::TensorOptions().dtype(torch_dtype);
     torch::Tensor edge_index =
             torch::from_blob(edge_index_array,{2,size},tensor_options).to(*device_);

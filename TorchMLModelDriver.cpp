@@ -129,7 +129,7 @@ TorchMLModelDriver::TorchMLModelDriver(
         //TODO delete allocation
         descriptor = new Descriptor(descriptor_name, descriptor_param_file);
     } else if (preprocessing == "Graph") {
-        graph_edge_indices = new int *[n_layers];
+        graph_edge_indices = new long *[n_layers];
         for (int i = 0; i < n_layers; i++) graph_edge_indices[i] = nullptr;
     } else {
         descriptor = nullptr;
@@ -273,8 +273,12 @@ void TorchMLModelDriver::postprocessOutputs(c10::IValue &out_tensor,
             forces[atom_count] = -force_accessor[atom_count];
         }
     } else {
-        std::cout << "SUMMING UP ENERGIES. THIS WILL BE REMOVED. SUM YOUR OWN ENERGIES\n";
-        out_tensor.toTensor().sum().backward();
+        if (preprocessing=="Descriptor") {
+            std::cout << "SUMMING UP ENERGIES. THIS WILL BE REMOVED. SUM YOUR OWN ENERGIES\n";
+            out_tensor.toTensor().sum().backward();
+        } else {
+            out_tensor.toTensor().backward();
+        }
         c10::IValue input_tensor;
         torchModel->GetInputNode(input_tensor);
         auto input_grad = input_tensor.toTensor().grad();
@@ -310,9 +314,11 @@ void TorchMLModelDriver::postprocessOutputs(c10::IValue &out_tensor,
                 *(forces + i + 2) *= -1.0;
             }
         } else {
-            auto force_accessor = input_grad.accessor<double, 1>();
-            for (int atom_count = 0; atom_count < force_accessor.size(0); ++atom_count) {
-                forces[atom_count] = -force_accessor[atom_count];
+            auto force_accessor = input_grad.accessor<double, 2>();
+            for (int i = 0; i < force_accessor.size(0); ++i) {
+                *(forces + i + 0) = -force_accessor[i][0];
+                *(forces + i + 1) = -force_accessor[i][1];
+                *(forces + i + 2) = -force_accessor[i][2];
             }
         }
     }
@@ -325,7 +331,6 @@ void TorchMLModelDriver::updateNeighborList(KIM::ModelComputeArguments const *co
     int const *neighbors;
     num_neighbors_.clear();
     neighbor_list.clear();
-    std::cout << numberOfParticles << "\n"; // HERE PRINT
     for (int i = 0; i < numberOfParticles; i++) {
         modelComputeArguments->GetNeighborList(0,
                                                i,
@@ -344,7 +349,7 @@ void TorchMLModelDriver::updateNeighborList(KIM::ModelComputeArguments const *co
 
 void TorchMLModelDriver::setDefaultInputs(const KIM::ModelComputeArguments *modelComputeArguments) {
     int const *numberOfParticlesPointer;
-    int *particleSpeciesCodes; // FIXME: Implement species code handling
+    int *particleSpeciesCodes; // FIXME: Implement species code handling Ask Ryan
     int *particleContributing = nullptr;
     double *coordinates = nullptr;
 
@@ -469,7 +474,7 @@ void TorchMLModelDriver::setGraphInputs(const KIM::ModelComputeArguments *modelC
     int numberOfNeighbors;
     int const *neighbors;
     std::tuple<int, int> bond_pair, rev_bond_pair;
-    std::vector<std::set<std::tuple<int, int> > > unrolled_graph(n_layers);
+    std::vector<std::set<std::tuple<long, long> > > unrolled_graph(n_layers);
     std::vector<int> next_list, prev_list;
     int contributing_atoms_count = 0;
 
@@ -502,7 +507,13 @@ void TorchMLModelDriver::setGraphInputs(const KIM::ModelComputeArguments *modelC
     }
     graph_set_to_graph_array(unrolled_graph);
 
-    torchModel->SetInputNode(0, particleSpeciesCodes, *numberOfParticlesPointer, false);
+    auto speciesZ = new int[*numberOfParticlesPointer];
+    for (int i = 0; i < *numberOfParticlesPointer; i++){
+        speciesZ[i] =  z_map[particleSpeciesCodes[i]];
+    }
+
+
+    torchModel->SetInputNode(0, speciesZ, *numberOfParticlesPointer, false);
 
     std::vector<int> input_tensor_size({*numberOfParticlesPointer, 3});
     torchModel->SetInputNode(1, coordinates, input_tensor_size, true);
@@ -511,9 +522,9 @@ void TorchMLModelDriver::setGraphInputs(const KIM::ModelComputeArguments *modelC
         torchModel->SetInputNode(2 + i, i, static_cast<int>(unrolled_graph[i].size()), graph_edge_indices);
     }
 
-    int * contraction_array = new int[*numberOfParticlesPointer];
+    auto contraction_array = new int64_t [*numberOfParticlesPointer];
     for (int i = 0; i < *numberOfParticlesPointer; i++){
-        contraction_array[i] = (i > contributing_atoms_count)? 0 : 1;
+        contraction_array[i] = (i < contributing_atoms_count)? 0 : 1;
     }
     torchModel->SetInputNode(2 + n_layers, contraction_array, *numberOfParticlesPointer, false);
 }
@@ -589,6 +600,11 @@ void TorchMLModelDriver::readParameters(KIM::ModelDriverCreate *const modelDrive
                 placeholder_string.erase(0, pos + 1);
             }
         }
+        // Species Z map
+        for (int i = 0; i < n_elements; i++){
+            z_map.push_back(sym_to_Z(elements_list[i]));
+        }
+
         // blank line
         std::getline(file_ptr, placeholder_string);
         // Ignore comments
@@ -789,13 +805,13 @@ int TorchMLModelDriver::ComputeArgumentsDestroy(
 }
 
 // ---------------------------------------------------------------------------------
-void TorchMLModelDriver::graph_set_to_graph_array(std::vector<std::set<std::tuple<int, int>>> &
+void TorchMLModelDriver::graph_set_to_graph_array(std::vector<std::set<std::tuple<long, long>>> &
 unrolled_graph) {
     int i = 0;
     for (auto const edge_index_set: unrolled_graph) {
         int j = 0;
         int graph_size = static_cast<int>(edge_index_set.size());
-        graph_edge_indices[i] = new int[graph_size * 2];
+        graph_edge_indices[i] = new long[graph_size * 2];
         for (auto bond_pair: edge_index_set) {
             graph_edge_indices[i][j] = std::get<0>(bond_pair);
             graph_edge_indices[i][j + graph_size] = std::get<1>(bond_pair);

@@ -1,12 +1,19 @@
 #ifndef MLMODEL_HPP
 #define MLMODEL_HPP
 
-#include <stdlib.h>
+#include <cstdlib>
 #include <vector>
 #include <string>
 
 #include <torch/script.h>
+#include <torchscatter/scatter.h>
+#include <torchsparse/sparse.h>
 
+// TODO Specify kind of models and enumerate
+// Basic kind I can think of
+// 1. Core model: numberOfParticles, coord, neighbours count, neighbour list
+// 2. Descriptor model: numberOfParticles, coord, neighbours count, neighbour list
+// 3. Graph model: TBA
 enum MLModelType {
     ML_MODEL_PYTORCH,
 };
@@ -16,7 +23,8 @@ class MLModel {
 public:
     static MLModel *create(const char * /*model_file_path*/,
                            MLModelType /*ml_model_type*/,
-                           const char *const /*device_name*/);
+                           const char * /*device_name*/,
+                           int /*model_input_size*/);
 
     // TODO: Should we use named inputs instead?  I believe they're required
     // by ONNX, but not sure exactly how they work vis-a-vis exporting to a
@@ -29,10 +37,22 @@ public:
     virtual void SetInputNode(int /*model_input_index*/, int * /*input*/,
                               int /*size*/, bool requires_grad = false) = 0;
 
+    virtual void SetInputNode(int /*model_input_index*/, int64_t * /*input*/,
+                              int /*size*/, bool requires_grad = false) = 0;
+
     virtual void SetInputNode(int /*model_input_index*/, double * /*input*/,
                               int /*size*/, bool requires_grad = false) = 0;
 
-    virtual void Run(double * /*energy*/, double * /*forces*/) = 0;
+    virtual void SetInputNode(int /*model_input_index*/, double * /*input*/,
+                      std::vector<int>& /*arb size*/, bool requires_grad = false) = 0;
+
+    virtual void SetInputNode(int /*model_input_index*/, int /*layer number*/,
+                              int /*size of graph edge index*/ , long **) = 0;
+
+    virtual void GetInputNode(int /*model_input_index*/, c10::IValue &) = 0;
+    virtual void GetInputNode( c10::IValue &) = 0;
+
+    virtual void Run(c10::IValue &) = 0;
 
     virtual ~MLModel() {};
 };
@@ -52,19 +72,36 @@ private:
 
 public:
     const char *model_file_path_;
-    bool descriptor_required = false;
-    std::string descriptor_function;
+    // TODO move descriptor to param file as ideally model is not dependent on it
+//    bool descriptor_required = false;
+//    std::string descriptor_function;
 
     PytorchModel(const char * /*model_file_path*/,
-                 const char *const /*device_name*/);
+                 const char * /*device_name*/,
+                 int /*input size*/);
 
     void SetInputNode(int /*model_input_index*/, int * /*input*/, int /*size*/,
+                      bool requires_grad = false);
+
+    void SetInputNode(int /*model_input_index*/, int64_t * /*input*/, int /*size*/,
                       bool requires_grad = false);
 
     void SetInputNode(int /*model_input_index*/, double * /*input*/,
                       int /*size*/, bool requires_grad = false);
 
-    void Run(double * /*energy*/, double * /*forces*/);
+    void SetInputNode(int /*model_input_index*/, double * /*input*/,
+                      std::vector<int>& /*arb size*/, bool requires_grad = false);
+
+    void SetInputNode(int /*model_input_index*/, int /*layer number*/,
+                      int /*size of graph edge index*/ , long **);
+
+    void GetInputNode(int /*model_input_index*/, c10::IValue &);
+    void GetInputNode(c10::IValue &);
+
+    void SetInputSize(int /*input size*/);
+
+//    void Run(double * /*energy*/, double * /*forces*/);
+    void Run(c10::IValue&);
 
     ~PytorchModel();
 };

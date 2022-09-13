@@ -6,9 +6,9 @@
 #include <torch/script.h>
 
 MLModel *MLModel::create(const char *model_file_path, MLModelType ml_model_type,
-                         const char *const device_name) {
+                         const char *const device_name, const int model_input_size) {
     if (ml_model_type == ML_MODEL_PYTORCH) {
-        return new PytorchModel(model_file_path, device_name);
+        return new PytorchModel(model_file_path, device_name, model_input_size);
     }
     // FIXME: raise an exception here if ``ml_model_type`` doesn't match any
     // known enumerations
@@ -75,6 +75,23 @@ void PytorchModel::SetInputNode(int model_input_index, int *input, int size,
     model_inputs_[model_input_index] = input_tensor;
 }
 
+void PytorchModel::SetInputNode(int model_input_index, int64_t *input, int size,
+                                bool requires_grad) {
+    // Map C++ data type used for the input here into the appropriate
+    // fixed-width torch data type
+    torch::Dtype torch_dtype = torch::kInt64;//get_torch_data_type(input);
+
+    // FIXME: Determine device to create tensor on
+    torch::TensorOptions tensor_options =
+            torch::TensorOptions().dtype(torch_dtype).requires_grad(requires_grad);
+
+    // Finally, create the input tensor and store it on the relevant MLModel
+    // attr
+    torch::Tensor input_tensor =
+            torch::from_blob(input, {size}, tensor_options).to(*device_);
+    model_inputs_[model_input_index] = input_tensor;
+}
+
 void PytorchModel::SetInputNode(int model_input_index, double *input, int size,
                                 bool requires_grad) {
     // Map C++ data type used for the input here into the appropriate
@@ -93,7 +110,35 @@ void PytorchModel::SetInputNode(int model_input_index, double *input, int size,
     model_inputs_[model_input_index] = input_tensor;
 }
 
-void PytorchModel::Run(double *energy, double *forces) {
+void PytorchModel::SetInputNode(int model_input_index, double *input, std::vector<int>& size,
+                                bool requires_grad) {
+
+    torch::Dtype torch_dtype = get_torch_data_type(input);
+
+    // FIXME: Determine device to create tensor on
+    torch::TensorOptions tensor_options =
+            torch::TensorOptions().dtype(torch_dtype).requires_grad(requires_grad);
+
+    // Finally, create the input tensor and store it on the relevant MLModel attr
+    std::vector<int64_t> size_t;
+    for (auto val: size) size_t.push_back(static_cast<int64_t>(val));
+    torch::Tensor input_tensor =
+            torch::from_blob(input, size_t, tensor_options).to(*device_);
+    model_inputs_[model_input_index] = input_tensor;
+}
+
+void PytorchModel::SetInputNode(int model_input_index, int layer,
+                                int size, long ** const unrolled_graph) {
+    long * edge_index_array = unrolled_graph[layer];
+    torch::Dtype torch_dtype = torch::kLong;//get_torch_data_type(edge_index_array);
+    torch::TensorOptions tensor_options = torch::TensorOptions().dtype(torch_dtype);
+    torch::Tensor edge_index =
+            torch::from_blob(edge_index_array,{2,size},tensor_options).to(*device_);
+    model_inputs_[model_input_index] = edge_index;
+};
+
+
+void PytorchModel::Run(c10::IValue& out_tensor) {
     // FIXME: Make this work for arbitrary number/type of outputs?  This may
     // lead us to make Run() take no parameters, and instead define separate
     // methods for accessing each of the outputs of the ML model.
@@ -103,28 +148,29 @@ void PytorchModel::Run(double *energy, double *forces) {
     // method return a tuple where the energy is the first entry and
     // the forces are the second
 
-    std::vector<c10::IValue> output_tensor_list;
-    const auto output_tensor_list_tmp =
-            module_.forward(model_inputs_).toTuple()->elements();
-    for (auto tensor: output_tensor_list_tmp) {
-        output_tensor_list.push_back(tensor);
-    }
+//    std::vector<c10::IValue> output_tensor_list;
+//    const auto output_tensor_list_tmp =
+//            module_.forward(model_inputs_).toTuple()->elements();
+//    for (auto tensor: output_tensor_list_tmp) {
+//        output_tensor_list.push_back(tensor);
+//    }
     // After moving the first output tensor back to the CPU (if necessary),
     // extract its value as the partial energy
-    *energy =
-            *output_tensor_list[0].toTensor().to(torch::kCPU).data_ptr<double>();
+//    *energy =
+//            *output_tensor_list[0].toTensor().to(torch::kCPU).data_ptr<double>();
 
     // After moving the second output tensor back to the CPU (if necessary),
     // extract its contents as the partial forces
-    auto torch_forces = output_tensor_list[1].toTensor().to(torch::kCPU);
-    // TODO: Move the accessor data extraction to a separate private method
-    auto force_accessor = torch_forces.accessor<double, 1>();
-    for (int atom_count = 0; atom_count < force_accessor.size(0); ++atom_count) {
-        forces[atom_count] = force_accessor[atom_count];
-    }
+//    auto torch_forces = output_tensor_list[1].toTensor().to(torch::kCPU);
+//    // TODO: Move the accessor data extraction to a separate private method
+//    auto force_accessor = torch_forces.accessor<double, 1>();
+//    for (int atom_count = 0; atom_count < force_accessor.size(0); ++atom_count) {
+//        forces[atom_count] = force_accessor[atom_count];
+//    }
+    out_tensor = module_.forward(model_inputs_);
 }
 
-PytorchModel::PytorchModel(const char *model_file_path, const char *device_name) {
+PytorchModel::PytorchModel(const char *model_file_path, const char *device_name, const int size_) {
     model_file_path_ = model_file_path;
     try {
         // Deserialize the ScriptModule from a file using torch::jit::load().
@@ -138,15 +184,15 @@ PytorchModel::PytorchModel(const char *model_file_path, const char *device_name)
     }
 
     // Check if model contain descriptor information
-    for (auto named_variable: module_.named_attributes()) {
-        if (named_variable.name == "descriptor") {
-            auto descriptor_string_val = (*named_variable.value.toString()).string();
-            if (!descriptor_string_val.empty()) {
-                descriptor_required = true;
-                descriptor_function = descriptor_string_val;
-            }
-        }
-    }
+//    for (auto named_variable: module_.named_attributes()) {
+//        if (named_variable.name == "descriptor") {
+//            auto descriptor_string_val = (*named_variable.value.toString()).string();
+//            if (!descriptor_string_val.empty()) {
+//                descriptor_required = true;
+//                descriptor_function = descriptor_string_val;
+//            }
+//        }
+//    }
 
     SetExecutionDevice(device_name);
 
@@ -155,11 +201,31 @@ PytorchModel::PytorchModel(const char *model_file_path, const char *device_name)
 
     // Reserve size for the four fixed model inputs (particle_contributing,
     // coordinates, number_of_neighbors, neighbor_list)
-    model_inputs_.resize(4);
+    // Model inputs to be determined
+     model_inputs_.resize(size_);
 
     // Set model to evaluation mode to set any dropout or batch normalization
     // layers to evaluation mode
     module_.eval();
+}
+
+void PytorchModel::GetInputNode(c10::IValue & out_tensor) {
+    // return first tensor with grad = True
+    for (auto & Ival: model_inputs_){
+        if (Ival.toTensor().requires_grad()){
+            out_tensor = Ival;
+            return;
+        }
+    }
+}
+
+void PytorchModel::GetInputNode(int index, c10::IValue & out_tensor) {
+    // return first tensor with grad = True
+    out_tensor = model_inputs_[index];
+}
+
+void PytorchModel::SetInputSize(int size) {
+    model_inputs_.resize(size);
 }
 
 PytorchModel::~PytorchModel() {

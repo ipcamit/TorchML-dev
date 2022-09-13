@@ -3,8 +3,9 @@
 #include "KIM_LogMacros.hpp"
 #include <map>
 #include <vector>
+#include <algorithm>
 
-#define MAX_FILE_NUM 2
+#define MAX_FILE_NUM 3
 //typedef double VecOfSize3[3];
 #define KIM_DEVICE_ENV_VAR "KIM_MODEL_EXECUTION_DEVICE"
 
@@ -67,13 +68,15 @@ TorchMLModelDriver::TorchMLModelDriver(
         KIM::TemperatureUnit const requestedTemperatureUnit,
         KIM::TimeUnit const requestedTimeUnit,
         int *const ier) {
+    std::cout << std::boolalpha;
     *ier = false;
-    //initialize members to remove warning--
+    //initialize members to remove warning----
     influence_distance = 0.0;
     n_elements = 0;
     torchModel = nullptr;
     returns_forces = false;
     // Read parameter files from model driver ---------------------------------------
+    // also initialize the torchModel
     readParameters(modelDriverCreate, ier);
     LOG_DEBUG("Read Param files");
     if (*ier) return;
@@ -85,9 +88,14 @@ TorchMLModelDriver::TorchMLModelDriver(
     if (*ier) return;
 
     // Set Influence distance ---------------------------------------------------------
-    int modelWillNotRequestNeighborsOfNoncontributingParticles_ = 1;
+    int modelWillNotRequestNeighborsOfNoncontributingParticles_;
+    if (preprocessing == "Graph") {
+        modelWillNotRequestNeighborsOfNoncontributingParticles_ = static_cast<int>(false);
+    } else {
+        modelWillNotRequestNeighborsOfNoncontributingParticles_ = static_cast<int>(true);
+    }
     modelDriverCreate->SetInfluenceDistancePointer(&influence_distance);
-    modelDriverCreate->SetNeighborListPointers(1, &influence_distance,
+    modelDriverCreate->SetNeighborListPointers(1, &cutoff_distance,
                                                &modelWillNotRequestNeighborsOfNoncontributingParticles_);
 
     // Species code --------------------------------------------------------------------
@@ -115,6 +123,19 @@ TorchMLModelDriver::TorchMLModelDriver(
                                        KIM::CHARGE_UNIT::unused,
                                        KIM::TEMPERATURE_UNIT::unused,
                                        KIM::TIME_UNIT::unused);
+
+    // Set preprocessor descriptor callbacks --------------------------------------------------
+    if (preprocessing == "Descriptor") {
+        //TODO delete allocation
+        descriptor = new Descriptor(descriptor_name, descriptor_param_file);
+    } else if (preprocessing == "Graph") {
+        graph_edge_indices = new long *[n_layers];
+        for (int i = 0; i < n_layers; i++) graph_edge_indices[i] = nullptr;
+    } else {
+        descriptor = nullptr;
+        graph_edge_indices = nullptr;
+    }
+    descriptor_array = nullptr;
 }
 
 //******************************************************************************
@@ -147,23 +168,10 @@ int TorchMLModelDriver::Compute(
         KIM::ModelComputeArguments const *const modelComputeArguments) {
 
     TorchMLModelDriver *modelObject;
-    modelCompute->GetModelBufferPointer(reinterpret_cast<void **>(&modelObject));
-
-    // VecOfSize3 *coordinates3;
-    double *energy = nullptr;
-    double *forces = nullptr;
-
-    auto ier = modelComputeArguments->GetArgumentPointer(
-            KIM::COMPUTE_ARGUMENT_NAME::partialForces,
-            (double const **) &forces)
-               || modelComputeArguments->GetArgumentPointer(
-            KIM::COMPUTE_ARGUMENT_NAME::partialEnergy,
-            &energy);
-    if (ier) return -1;
-    modelObject->setInputs(modelComputeArguments);
-    modelObject->torchModel->Run(energy, forces);
-
-    return ier;
+    modelCompute->GetModelBufferPointer(reinterpret_cast<void **>(&modelObject));;
+    modelObject->Run(modelComputeArguments);
+    // TODO see proper way to return error codes
+    return false;
 }
 
 //******************************************************************************
@@ -197,6 +205,126 @@ int TorchMLModelDriver::ComputeArgumentsCreate(
 
 // *****************************************************************************
 // Auxiliary methods------------------------------------------------------------
+
+void TorchMLModelDriver::Run(const KIM::ModelComputeArguments *const modelComputeArguments) {
+    c10::IValue out_tensor;
+    preprocessInputs(modelComputeArguments);
+    torchModel->Run(out_tensor);
+    postprocessOutputs(out_tensor, modelComputeArguments);
+}
+
+// -----------------------------------------------------------------------------
+void TorchMLModelDriver::preprocessInputs(KIM::ModelComputeArguments const *const modelComputeArguments) {
+    //TODO: Make preprocessing type enums
+    if (preprocessing == "None") {
+        setDefaultInputs(modelComputeArguments);
+    } else if (preprocessing == "Descriptor") {
+        setDescriptorInputs(modelComputeArguments);
+    } else if (preprocessing == "Graph") {
+        setGraphInputs(modelComputeArguments);
+    }
+}
+
+// -----------------------------------------------------------------------------
+void TorchMLModelDriver::postprocessOutputs(c10::IValue &out_tensor,
+                                            KIM::ModelComputeArguments const *modelComputeArguments) {
+
+    double *energy = nullptr;
+    double *forces = nullptr;
+    int const *numberOfParticlesPointer;
+    int *particleSpeciesCodes; // FIXME: Implement species code handling
+    int *particleContributing = nullptr;
+    double *coordinates = nullptr;
+
+    auto ier = modelComputeArguments->GetArgumentPointer(
+            KIM::COMPUTE_ARGUMENT_NAME::numberOfParticles,
+            &numberOfParticlesPointer)
+               || modelComputeArguments->GetArgumentPointer(
+            KIM::COMPUTE_ARGUMENT_NAME::particleSpeciesCodes,
+            &particleSpeciesCodes)
+               || modelComputeArguments->GetArgumentPointer(
+            KIM::COMPUTE_ARGUMENT_NAME::particleContributing,
+            &particleContributing)
+               || modelComputeArguments->GetArgumentPointer(
+            KIM::COMPUTE_ARGUMENT_NAME::coordinates,
+            (double const **) &coordinates)
+               || modelComputeArguments->GetArgumentPointer(
+            KIM::COMPUTE_ARGUMENT_NAME::partialForces,
+            (double const **) &forces)
+               || modelComputeArguments->GetArgumentPointer(
+            KIM::COMPUTE_ARGUMENT_NAME::partialEnergy,
+            &energy);
+
+    if (ier) return;
+
+    int contributing_atoms_count = 0;
+    for (int i = 0; i < *numberOfParticlesPointer; i++) {
+        if (*(particleContributing + i) == 1) {
+            contributing_atoms_count += 1;
+        }
+    }
+
+    if (returns_forces) {
+        const auto output_tensor_list = out_tensor.toTuple()->elements();
+        *energy = *output_tensor_list[0].toTensor().to(torch::kCPU).data_ptr<double>();
+        auto torch_forces = output_tensor_list[1].toTensor().to(torch::kCPU);
+        auto force_accessor = torch_forces.accessor<double, 1>();
+        for (int atom_count = 0; atom_count < force_accessor.size(0); ++atom_count) {
+            forces[atom_count] = -force_accessor[atom_count];
+        }
+    } else {
+        if (preprocessing=="Descriptor") {
+            std::cout << "SUMMING UP ENERGIES. THIS WILL BE REMOVED. SUM YOUR OWN ENERGIES\n";
+            out_tensor.toTensor().sum().backward();
+        } else {
+            out_tensor.toTensor().backward();
+        }
+        c10::IValue input_tensor;
+        torchModel->GetInputNode(input_tensor);
+        auto input_grad = input_tensor.toTensor().grad();
+        *energy = *out_tensor.toTensor().to(torch::kCPU).data_ptr<double>();
+        int neigh_from = 0;
+        int n_neigh = 0;
+        if (preprocessing == "Descriptor") {
+            // TODO this is temporary hard coded fix. Need to improve it by inheriting Base
+            // descriptor class in all descriptors. **Priority**
+            std::cout << "USING SYMUFUN WORKAROUND. FIX ME ASAP" << "\n";
+            auto sf = reinterpret_cast<SymmetryFunctionParams *>(descriptor->descriptor_map["SymmetryFunction"]);
+            int width = sf->width;
+            //
+            for (int i = 0; i < contributing_atoms_count; i++) {
+                n_neigh = num_neighbors_[i];
+                std::vector<int> n_list(neighbor_list.begin() + neigh_from,
+                                        neighbor_list.begin() + neigh_from + n_neigh);
+                neigh_from += n_neigh;
+                grad_symmetry_function_atomic(i,
+                                              coordinates,
+                                              forces,
+                                              particleSpeciesCodes,
+                                              n_list.data(),
+                                              n_neigh,
+                                              input_tensor.toTensor().data_ptr<double>() + (i * width),
+                                              input_grad.data_ptr<double>() + (i * width),
+                                              sf);
+            }
+            for (int i = 0; i < *numberOfParticlesPointer; i++) {
+                // forces = -grad
+                *(forces + i) *= -1.0;
+                *(forces + i + 1) *= -1.0;
+                *(forces + i + 2) *= -1.0;
+            }
+        } else {
+            auto force_accessor = input_grad.accessor<double, 2>();
+            for (int i = 0; i < force_accessor.size(0); ++i) {
+                *(forces + i + 0) = -force_accessor[i][0];
+                *(forces + i + 1) = -force_accessor[i][1];
+                *(forces + i + 2) = -force_accessor[i][2];
+            }
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
 void TorchMLModelDriver::updateNeighborList(KIM::ModelComputeArguments const *const modelComputeArguments,
                                             int const numberOfParticles) {
     int numOfNeighbors;
@@ -215,15 +343,13 @@ void TorchMLModelDriver::updateNeighborList(KIM::ModelComputeArguments const *co
     }
 }
 
-// -----------------------------------------------------------------
+// -----------------------------------------------------------------------------
 #undef KIM_LOGGER_OBJECT_NAME
 #define KIM_LOGGER_OBJECT_NAME modelComputeArguments
 
-void TorchMLModelDriver::setInputs(KIM::ModelComputeArguments const *const modelComputeArguments) {
-    // TODO: This will call preprocessing based on model inputs
-
+void TorchMLModelDriver::setDefaultInputs(const KIM::ModelComputeArguments *modelComputeArguments) {
     int const *numberOfParticlesPointer;
-    int *particleSpeciesCodes; // FIXME: Implement species code handling
+    int *particleSpeciesCodes; // FIXME: Implement species code handling Ask Ryan
     int *particleContributing = nullptr;
     double *coordinates = nullptr;
 
@@ -239,17 +365,168 @@ void TorchMLModelDriver::setInputs(KIM::ModelComputeArguments const *const model
                || modelComputeArguments->GetArgumentPointer(
             KIM::COMPUTE_ARGUMENT_NAME::coordinates,
             (double const **) &coordinates);
-    LOG_ERROR("Could not create model compute arguments input @ setInputs");
-    if (ier) return;
+    if (ier) {
+        LOG_ERROR("Could not create model compute arguments input @ setDefaultInputs");
+        return;
+    }
     int const numberOfParticles = *numberOfParticlesPointer;
 
     torchModel->SetInputNode(0, particleContributing, numberOfParticles);
     torchModel->SetInputNode(1, coordinates, 3 * numberOfParticles, true);
 
     updateNeighborList(modelComputeArguments, numberOfParticles);
-
     torchModel->SetInputNode(2, num_neighbors_.data(), static_cast<int>(num_neighbors_.size()));
     torchModel->SetInputNode(3, neighbor_list.data(), static_cast<int>(neighbor_list.size()));
+}
+
+// -----------------------------------------------------------------------------
+#undef KIM_LOGGER_OBJECT_NAME
+#define KIM_LOGGER_OBJECT_NAME modelComputeArguments
+
+void TorchMLModelDriver::setDescriptorInputs(const KIM::ModelComputeArguments *modelComputeArguments) {
+    int const *numberOfParticlesPointer;
+    int *particleSpeciesCodes; // FIXME: Implement species code handling
+    int *particleContributing = nullptr;
+    double *coordinates = nullptr;
+    auto ier = modelComputeArguments->GetArgumentPointer(
+            KIM::COMPUTE_ARGUMENT_NAME::numberOfParticles,
+            &numberOfParticlesPointer)
+               || modelComputeArguments->GetArgumentPointer(
+            KIM::COMPUTE_ARGUMENT_NAME::particleSpeciesCodes,
+            &particleSpeciesCodes)
+               || modelComputeArguments->GetArgumentPointer(
+            KIM::COMPUTE_ARGUMENT_NAME::particleContributing,
+            &particleContributing)
+               || modelComputeArguments->GetArgumentPointer(
+            KIM::COMPUTE_ARGUMENT_NAME::coordinates,
+            (double const **) &coordinates);
+    if (ier) {
+        LOG_ERROR("Could not create model compute arguments input @ setDefaultInputs");
+        return;
+    }
+    int neigh_from, n_neigh;
+    neigh_from = 0;
+    n_neigh = 0;
+
+    int contributing_atoms_count = 0;
+    for (int i = 0; i < *numberOfParticlesPointer; i++) {
+        if (*(particleContributing + i) == 1) {
+            contributing_atoms_count += 1;
+        }
+    }
+    // Initialize descriptors on the basis of function
+    auto option = torch::TensorOptions().dtype(torch::kFloat64).requires_grad(true);
+
+    // TODO this is temporary hard coded fix. Need to improve it by inheriting Base
+    // descriptor class in all descriptors. **Priority**
+    std::cout << "USING SYMUFUN WORKAROUND. FIX ME ASAP" << "\n";
+    auto sf = reinterpret_cast<SymmetryFunctionParams *>(descriptor->descriptor_map["SymmetryFunction"]);
+    int width = sf->width;
+    //
+
+    updateNeighborList(modelComputeArguments, *numberOfParticlesPointer);
+
+    descriptor_array = new double[contributing_atoms_count * width];
+    for (int i = 0; i < contributing_atoms_count; i++) {
+        for (int j = i * width; j < (i + 1) * width; j++) { descriptor_array[j] = 0.; }
+        n_neigh = num_neighbors_[i];
+        std::vector<int> n_list(neighbor_list.begin() + neigh_from, neighbor_list.begin() + neigh_from + n_neigh);
+        neigh_from += n_neigh;
+        symmetry_function_atomic(i,
+                                 coordinates,
+                                 particleSpeciesCodes,
+                                 n_list.data(),
+                                 n_neigh,
+                                 descriptor_array + (i * width),
+                                 sf);
+    }
+    // auto descriptor_tensor = torch::from_blob(descriptor_array, {contributing_atoms_count, width}, option);
+
+    std::vector<int> input_tensor_size({contributing_atoms_count, width});
+    torchModel->SetInputNode(0, descriptor_array, input_tensor_size, true);
+}
+
+// -----------------------------------------------------------------------------
+#undef KIM_LOGGER_OBJECT_NAME
+#define KIM_LOGGER_OBJECT_NAME modelComputeArguments
+
+void TorchMLModelDriver::setGraphInputs(const KIM::ModelComputeArguments *modelComputeArguments) {
+    int const *numberOfParticlesPointer;
+    int *particleSpeciesCodes; // FIXME: Implement species code handling
+    int *particleContributing = nullptr;
+    double *coordinates = nullptr;
+    auto ier = modelComputeArguments->GetArgumentPointer(
+            KIM::COMPUTE_ARGUMENT_NAME::numberOfParticles,
+            &numberOfParticlesPointer)
+               || modelComputeArguments->GetArgumentPointer(
+            KIM::COMPUTE_ARGUMENT_NAME::particleSpeciesCodes,
+            &particleSpeciesCodes)
+               || modelComputeArguments->GetArgumentPointer(
+            KIM::COMPUTE_ARGUMENT_NAME::particleContributing,
+            &particleContributing)
+               || modelComputeArguments->GetArgumentPointer(
+            KIM::COMPUTE_ARGUMENT_NAME::coordinates,
+            (double const **) &coordinates);
+    if (ier) {
+        LOG_ERROR("Could not create model compute arguments input @ setDefaultInputs");
+        return;
+    }
+    int numberOfNeighbors;
+    int const *neighbors;
+    std::tuple<int, int> bond_pair, rev_bond_pair;
+    std::vector<std::set<std::tuple<long, long> > > unrolled_graph(n_layers);
+    std::vector<int> next_list, prev_list;
+    int contributing_atoms_count = 0;
+
+    for (int i = 0; i < *numberOfParticlesPointer; i++) {
+        if (*(particleContributing + i) == 1) {
+            contributing_atoms_count += 1;
+        }
+    }
+
+    for (int atom_i = 0; atom_i < contributing_atoms_count; atom_i++) {
+        prev_list.push_back(atom_i);
+        for (int i = 0; i < n_layers; i++) {
+            std::set<std::tuple<int, int> > conv_layer;
+            do {
+                int curr_atom = prev_list.back();
+                prev_list.pop_back();
+                modelComputeArguments->GetNeighborList(0, curr_atom, &numberOfNeighbors, &neighbors);
+                for (int j = 0; j < numberOfNeighbors; j++) {
+                    bond_pair = std::make_tuple(curr_atom, neighbors[j]);
+                    rev_bond_pair = std::make_tuple(neighbors[j], curr_atom);
+                    conv_layer.insert(bond_pair);
+                    conv_layer.insert(rev_bond_pair);
+                    next_list.push_back((neighbors[j]));
+                }
+            } while (!prev_list.empty());
+            prev_list.swap(next_list);
+            unrolled_graph[i].insert(conv_layer.begin(), conv_layer.end());
+        }
+        prev_list.clear();
+    }
+    graph_set_to_graph_array(unrolled_graph);
+
+    auto speciesZ = new int[*numberOfParticlesPointer];
+    for (int i = 0; i < *numberOfParticlesPointer; i++){
+        speciesZ[i] =  z_map[particleSpeciesCodes[i]];
+    }
+
+
+    torchModel->SetInputNode(0, speciesZ, *numberOfParticlesPointer, false);
+
+    std::vector<int> input_tensor_size({*numberOfParticlesPointer, 3});
+    torchModel->SetInputNode(1, coordinates, input_tensor_size, true);
+
+    for (int i = 0; i < n_layers; i++) {
+        torchModel->SetInputNode(2 + i, i, static_cast<int>(unrolled_graph[i].size()), graph_edge_indices);
+    }
+
+    auto contraction_array = new int64_t [*numberOfParticlesPointer];
+    for (int i = 0; i < *numberOfParticlesPointer; i++){
+        contraction_array[i] = (i < contributing_atoms_count)? 0 : 1;
+    }
+    torchModel->SetInputNode(2 + n_layers, contraction_array, *numberOfParticlesPointer, false);
 }
 
 // --------------------------------------------------------------------------------
@@ -263,6 +540,7 @@ void TorchMLModelDriver::readParameters(KIM::ModelDriverCreate *const modelDrive
     std::string const *param_file_name, *tmp_file_name;
     std::string const *param_dir_name;
     std::string const *model_file_name;
+    std::string const *descriptor_file_name;
 
     modelDriverCreate->GetNumberOfParameterFiles(&num_param_files);
 
@@ -279,6 +557,8 @@ void TorchMLModelDriver::readParameters(KIM::ModelDriverCreate *const modelDrive
             param_file_name = tmp_file_name;
         } else if (tmp_file_name->substr(tmp_file_name->size() - 2) == "pt") {
             model_file_name = tmp_file_name;
+        } else if (tmp_file_name->substr(tmp_file_name->size() - 3) == "dat") {
+            descriptor_file_name = tmp_file_name;
         } else {
             LOG_ERROR("File extensions do not match; only expected .param or .pt");
             *ier = true;
@@ -291,6 +571,7 @@ void TorchMLModelDriver::readParameters(KIM::ModelDriverCreate *const modelDrive
 
     std::string full_qualified_file_name = *param_dir_name + "/" + *param_file_name;
     std::string full_qualified_model_name = *param_dir_name + "/" + *model_file_name;
+
     std::string placeholder_string;
 
     std::fstream file_ptr(full_qualified_file_name);
@@ -319,6 +600,11 @@ void TorchMLModelDriver::readParameters(KIM::ModelDriverCreate *const modelDrive
                 placeholder_string.erase(0, pos + 1);
             }
         }
+        // Species Z map
+        for (int i = 0; i < n_elements; i++){
+            z_map.push_back(sym_to_Z(elements_list[i]));
+        }
+
         // blank line
         std::getline(file_ptr, placeholder_string);
         // Ignore comments
@@ -327,6 +613,8 @@ void TorchMLModelDriver::readParameters(KIM::ModelDriverCreate *const modelDrive
         } while (placeholder_string[0] == '#');
         // which preprocessing to use
         preprocessing = placeholder_string;
+        // std::transform(preprocessing.begin(),preprocessing.end(),
+        //                preprocessing.begin(),::tolower);
 
         // blank line
         std::getline(file_ptr, placeholder_string);
@@ -335,7 +623,15 @@ void TorchMLModelDriver::readParameters(KIM::ModelDriverCreate *const modelDrive
             std::getline(file_ptr, placeholder_string);
         } while (placeholder_string[0] == '#');
         // influence distance
-        influence_distance = std::stod(placeholder_string);
+        cutoff_distance = std::stod(placeholder_string);
+        n_layers = 0;
+        if (preprocessing == "Graph") {
+            std::getline(file_ptr, placeholder_string);
+            n_layers = std::stoi(placeholder_string);
+            influence_distance = cutoff_distance * n_layers;
+        } else {
+            influence_distance = cutoff_distance;
+        }
 
         // blank line
         std::getline(file_ptr, placeholder_string);
@@ -354,8 +650,30 @@ void TorchMLModelDriver::readParameters(KIM::ModelDriverCreate *const modelDrive
         } while (placeholder_string[0] == '#');
         // Does the model return forces? If no then we need to compute gradients
         // If yes we can optimize it further using inference mode
-        for (char & t : placeholder_string) t = static_cast<char>(tolower(t));
+        for (char &t: placeholder_string) t = static_cast<char>(tolower(t));
         returns_forces = placeholder_string == "true";
+
+        // blank line
+        std::getline(file_ptr, placeholder_string);
+        // Ignore comments
+        do {
+            std::getline(file_ptr, placeholder_string);
+        } while (placeholder_string[0] == '#');
+        // number of strings
+        number_of_inputs = std::stoi(placeholder_string);
+
+        if (preprocessing == "Descriptor") {
+            // blank line
+            std::getline(file_ptr, placeholder_string);
+            // Ignore comments
+            do {
+                std::getline(file_ptr, placeholder_string);
+            } while (placeholder_string[0] == '#');
+            // number of strings
+            descriptor_name = placeholder_string;
+            descriptor_param_file = *param_dir_name + "/" + *descriptor_file_name;
+            // TODO raise exception for missing or unfound descriptor if needed?
+        }
 
     } else {
         LOG_ERROR("Param file not found");
@@ -373,10 +691,12 @@ void TorchMLModelDriver::readParameters(KIM::ModelDriverCreate *const modelDrive
     // Load Torch Model ----------------------------------------------------------------
     torchModel = MLModel::create(full_qualified_model_name.c_str(),
                                  ML_MODEL_PYTORCH,
-                                 std::getenv(KIM_DEVICE_ENV_VAR));
+                                 std::getenv(KIM_DEVICE_ENV_VAR),
+                                 number_of_inputs);
     LOG_INFORMATION("Loaded Torch model and set to eval");
 }
 
+// --------------------------------------------------------------------------------
 #undef KIM_LOGGER_OBJECT_NAME
 #define KIM_LOGGER_OBJECT_NAME modelDriverCreate
 
@@ -423,6 +743,7 @@ void TorchMLModelDriver::unitConversion(KIM::ModelDriverCreate *const modelDrive
 
 }
 
+// --------------------------------------------------------------------------------
 void TorchMLModelDriver::setSpecies(KIM::ModelDriverCreate *const modelDriverCreate, int *const ier) {
     for (auto const &species: elements_list) {
         KIM::SpeciesName const specName1(species);
@@ -439,6 +760,7 @@ void TorchMLModelDriver::setSpecies(KIM::ModelDriverCreate *const modelDriverCre
     }
 }
 
+// --------------------------------------------------------------------------------
 void TorchMLModelDriver::registerFunctionPointers(KIM::ModelDriverCreate *const modelDriverCreate, int *const ier) {
     // Use function pointer definitions to verify correct prototypes
     KIM::ModelDestroyFunction *destroy = TorchMLModelDriver::Destroy;
@@ -480,4 +802,31 @@ int TorchMLModelDriver::ComputeArgumentsDestroy(
         KIM::ModelCompute const *const modelCompute,
         KIM::ModelComputeArgumentsDestroy *const modelComputeArgumentsDestroy) {
     return false;
+}
+
+// ---------------------------------------------------------------------------------
+void TorchMLModelDriver::graph_set_to_graph_array(std::vector<std::set<std::tuple<long, long>>> &
+unrolled_graph) {
+    int i = 0;
+    for (auto const edge_index_set: unrolled_graph) {
+        int j = 0;
+        int graph_size = static_cast<int>(edge_index_set.size());
+        graph_edge_indices[i] = new long[graph_size * 2];
+        for (auto bond_pair: edge_index_set) {
+            graph_edge_indices[i][j] = std::get<0>(bond_pair);
+            graph_edge_indices[i][j + graph_size] = std::get<1>(bond_pair);
+            j++;
+        }
+        i++;
+    }
+}
+
+
+// *****************************************************************************
+TorchMLModelDriver::~TorchMLModelDriver() {
+    delete descriptor_array;
+    if (preprocessing == "Graph") {
+        for (int i = 0; i < n_layers; i++) delete graph_edge_indices[i];
+    }
+    delete graph_edge_indices;
 }

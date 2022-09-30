@@ -88,7 +88,6 @@ TorchMLModelDriver::TorchMLModelDriver(
     if (*ier) return;
 
     // Set Influence distance ---------------------------------------------------------
-    int modelWillNotRequestNeighborsOfNoncontributingParticles_;
     if (preprocessing == "Graph") {
         modelWillNotRequestNeighborsOfNoncontributingParticles_ = static_cast<int>(false);
     } else {
@@ -374,7 +373,14 @@ void TorchMLModelDriver::setDefaultInputs(const KIM::ModelComputeArguments *mode
     torchModel->SetInputNode(0, particleContributing, numberOfParticles);
     torchModel->SetInputNode(1, coordinates, 3 * numberOfParticles, true);
 
-    updateNeighborList(modelComputeArguments, numberOfParticles);
+    int contributing_particle = 0;
+    for (int i = 0; i < numberOfParticles; i++){
+        if (particleContributing[i] == 1) {
+            contributing_particle +=1;
+        }
+    }
+
+    updateNeighborList(modelComputeArguments, contributing_particle);
     torchModel->SetInputNode(2, num_neighbors_.data(), static_cast<int>(num_neighbors_.size()));
     torchModel->SetInputNode(3, neighbor_list.data(), static_cast<int>(neighbor_list.size()));
 }
@@ -424,7 +430,7 @@ void TorchMLModelDriver::setDescriptorInputs(const KIM::ModelComputeArguments *m
     int width = sf->width;
     //
 
-    updateNeighborList(modelComputeArguments, *numberOfParticlesPointer);
+    updateNeighborList(modelComputeArguments, contributing_atoms_count);
 
     descriptor_array = new double[contributing_atoms_count * width];
     for (int i = 0; i < contributing_atoms_count; i++) {

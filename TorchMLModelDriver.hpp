@@ -29,6 +29,7 @@ int model_driver_create(KIM::ModelDriverCreate *modelDriverCreate,
 class TorchMLModelDriver {
 public:
     double influence_distance, cutoff_distance;
+    int modelWillNotRequestNeighborsOfNoncontributingParticles_;
     int n_elements, n_layers;
     std::vector<std::string> elements_list;
     std::string preprocessing;

@@ -493,21 +493,24 @@ void TorchMLModelDriver::setGraphInputs(const KIM::ModelComputeArguments *modelC
     for (int atom_i = 0; atom_i < contributing_atoms_count; atom_i++) {
         prev_list.push_back(atom_i);
         for (int i = 0; i < n_layers; i++) {
-            std::set<std::tuple<int, int> > conv_layer;
-            do {
-                int curr_atom = prev_list.back();
-                prev_list.pop_back();
-                modelComputeArguments->GetNeighborList(0, curr_atom, &numberOfNeighbors, &neighbors);
-                for (int j = 0; j < numberOfNeighbors; j++) {
-                    bond_pair = std::make_tuple(curr_atom, neighbors[j]);
-                    rev_bond_pair = std::make_tuple(neighbors[j], curr_atom);
-                    conv_layer.insert(bond_pair);
-                    conv_layer.insert(rev_bond_pair);
-                    next_list.push_back((neighbors[j]));
-                }
-            } while (!prev_list.empty());
-            prev_list.swap(next_list);
-            unrolled_graph[i].insert(conv_layer.begin(), conv_layer.end());
+            if (!prev_list.empty()){
+                do {
+                    int curr_atom = prev_list.back();
+                    prev_list.pop_back();
+                    modelComputeArguments->GetNeighborList(0,
+                                                           curr_atom,
+                                                           &numberOfNeighbors,
+                                                           &neighbors);
+                    for (int j = 0; j < numberOfNeighbors; j++) {
+                        bond_pair = std::make_tuple(curr_atom, neighbors[j]);
+                        rev_bond_pair = std::make_tuple(neighbors[j], curr_atom);
+                        unrolled_graph[i].insert(bond_pair);
+                        unrolled_graph[i].insert(rev_bond_pair);
+                        next_list.push_back((neighbors[j]));
+                    }
+                } while (!prev_list.empty());
+                prev_list.swap(next_list);
+            }
         }
         prev_list.clear();
     }

@@ -490,6 +490,8 @@ void TorchMLModelDriver::setGraphInputs(const KIM::ModelComputeArguments *modelC
         }
     }
 
+    double cutoff_sq = cutoff_distance * cutoff_distance;
+
     for (int atom_i = 0; atom_i < contributing_atoms_count; atom_i++) {
         prev_list.push_back(atom_i);
         for (int i = 0; i < n_layers; i++) {
@@ -502,11 +504,16 @@ void TorchMLModelDriver::setGraphInputs(const KIM::ModelComputeArguments *modelC
                                                            &numberOfNeighbors,
                                                            &neighbors);
                     for (int j = 0; j < numberOfNeighbors; j++) {
-                        bond_pair = std::make_tuple(curr_atom, neighbors[j]);
-                        rev_bond_pair = std::make_tuple(neighbors[j], curr_atom);
-                        unrolled_graph[i].insert(bond_pair);
-                        unrolled_graph[i].insert(rev_bond_pair);
-                        next_list.push_back((neighbors[j]));
+                        if ((std::pow((*(coordinates + 3 * curr_atom + 0) - *(coordinates + 3 * neighbors[j] + 0)),2) +
+                             std::pow((*(coordinates + 3 * curr_atom + 1) - *(coordinates + 3 * neighbors[j] + 1)),2) +
+                             std::pow((*(coordinates + 3 * curr_atom + 2) - *(coordinates + 3 * neighbors[j] + 2)),2))
+                             <=cutoff_sq) {
+                            bond_pair = std::make_tuple(curr_atom, neighbors[j]);
+                            rev_bond_pair = std::make_tuple(neighbors[j], curr_atom);
+                            unrolled_graph[i].insert(bond_pair);
+                            unrolled_graph[i].insert(rev_bond_pair);
+                            next_list.push_back((neighbors[j]));
+                        }
                     }
                 } while (!prev_list.empty());
                 prev_list.swap(next_list);

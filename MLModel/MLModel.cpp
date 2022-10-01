@@ -1,6 +1,7 @@
 #include <map>
 #include <string>
 #include <iostream>
+#include <stdexcept>
 #include "MLModel.hpp"
 
 #include <torch/script.h>
@@ -9,9 +10,9 @@ MLModel *MLModel::create(const char *model_file_path, MLModelType ml_model_type,
                          const char *const device_name, const int model_input_size) {
     if (ml_model_type == ML_MODEL_PYTORCH) {
         return new PytorchModel(model_file_path, device_name, model_input_size);
+    } else {
+        throw std::invalid_argument("Model Type Not defined");
     }
-    // FIXME: raise an exception here if ``ml_model_type`` doesn't match any
-    // known enumerations
 }
 
 void PytorchModel::SetExecutionDevice(const char *const device_name) {
@@ -153,9 +154,10 @@ void PytorchModel::Run(c10::IValue &out_tensor) {
 
 PytorchModel::PytorchModel(const char *model_file_path, const char *device_name, const int size_) {
     model_file_path_ = model_file_path;
+    SetExecutionDevice(device_name);
     try {
         // Deserialize the ScriptModule from a file using torch::jit::load().
-        module_ = torch::jit::load(model_file_path_);
+        module_ = torch::jit::load(model_file_path_,*device_);
     }
     catch (const c10::Error &e) {
         std::cerr << "ERROR: An error occurred while attempting to load the "

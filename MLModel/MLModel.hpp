@@ -73,9 +73,6 @@ private:
 
 public:
     const char *model_file_path_;
-    // TODO move descriptor to param file as ideally model is not dependent on it
-//    bool descriptor_required = false;
-//    std::string descriptor_function;
 
     PytorchModel(const char * /*model_file_path*/,
                  const char * /*device_name*/,

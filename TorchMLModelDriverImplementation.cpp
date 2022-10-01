@@ -82,6 +82,7 @@ TorchMLModelDriverImplementation::TorchMLModelDriverImplementation(
     // Set preprocessor descriptor callbacks --------------------------------------------------
     if (preprocessing == "Descriptor") {
         descriptor = new Descriptor(descriptor_name, descriptor_param_file);
+        graph_edge_indices = nullptr;
     } else if (preprocessing == "Graph") {
         graph_edge_indices = new long *[n_layers];
         for (int i = 0; i < n_layers; i++) graph_edge_indices[i] = nullptr;
@@ -98,7 +99,7 @@ TorchMLModelDriverImplementation::TorchMLModelDriverImplementation(
 
 //******************************************************************************
 int TorchMLModelDriverImplementation::Refresh(KIM::ModelRefresh *const modelRefresh) {
-    TorchMLModelDriver *modelObject; //To silent compiler
+    TorchMLModelDriver *modelObject; //To silence the compiler
     modelRefresh->GetModelBufferPointer(reinterpret_cast<void **>(&modelObject));
     // As all param are part of torch model, nothing to do here?
     // TODO Distance matrix for computational efficiency, which will be refreshed to -1
@@ -743,7 +744,7 @@ void TorchMLModelDriverImplementation::registerFunctionPointers(KIM::ModelDriver
 int TorchMLModelDriverImplementation::ComputeArgumentsDestroy(
         KIM::ModelComputeArgumentsDestroy *const modelComputeArgumentsDestroy) {
     // Nothing to do here?
-    TorchMLModelDriver *modelObject; // To silent compiler
+    TorchMLModelDriver *modelObject; // To silence the compiler
     modelComputeArgumentsDestroy->GetModelBufferPointer(reinterpret_cast<void **>(&modelObject));
     return false;
 }

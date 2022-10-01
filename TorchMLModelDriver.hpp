@@ -28,8 +28,8 @@ int model_driver_create(KIM::ModelDriverCreate *modelDriverCreate,
 
 class TorchMLModelDriver {
 public:
+    // All file params are public
     double influence_distance, cutoff_distance;
-    int modelWillNotRequestNeighborsOfNoncontributingParticles_;
     int n_elements, n_layers;
     std::vector<std::string> elements_list;
     std::string preprocessing;
@@ -66,14 +66,23 @@ public:
             KIM::ModelComputeArgumentsDestroy *modelComputeArgumentsDestroy);
 
 private:
-    MLModel *torchModel;
+    // Derived or assigned variables are private
+    int modelWillNotRequestNeighborsOfNoncontributingParticles_;
+    int n_contributing_atoms;
+    int number_of_inputs;
+    int * species_atomic_number;
+    int64_t * contraction_array;
+
+    MLModel *mlModel;
+
     Descriptor *descriptor;
+
     std::vector<int> num_neighbors_;
     std::vector<int> neighbor_list;
-    int number_of_inputs;
+    std::vector<int> z_map;
+
     double * descriptor_array;
     long ** graph_edge_indices;
-    std::vector<int> z_map;
 
     void updateNeighborList(KIM::ModelComputeArguments const *modelComputeArguments, int numberOfParticles);
 
@@ -81,7 +90,7 @@ private:
     void setDescriptorInputs(const KIM::ModelComputeArguments * modelComputeArguments);
     void setGraphInputs(const KIM::ModelComputeArguments * modelComputeArguments);
 
-    void readParameters(KIM::ModelDriverCreate *modelDriverCreate, int *ier);
+    void readParametersFile(KIM::ModelDriverCreate *modelDriverCreate, int *ier);
 
     static void unitConversion(KIM::ModelDriverCreate *modelDriverCreate,
                                KIM::LengthUnit requestedLengthUnit,
@@ -94,14 +103,19 @@ private:
     void setSpecies(KIM::ModelDriverCreate *modelDriverCreate, int *ier);
 
     static void registerFunctionPointers(KIM::ModelDriverCreate *modelDriverCreate, int *ier);
+
     void preprocessInputs(KIM::ModelComputeArguments const *modelComputeArguments);
     void postprocessOutputs(c10::IValue&, KIM::ModelComputeArguments const *);
+
     void Run(KIM::ModelComputeArguments const *modelComputeArguments);
+    void contributingAtomCounts(KIM::ModelComputeArguments const *modelComputeArguments);
+    // This is only supplementary function to be called by other function, so
+    // this is following different naming convention.
     void graph_set_to_graph_array(std::vector<std::set<std::tuple<long, long> > > &);
     // TorchMLModelImplementation * implementation_;
 };
 
-int sym_to_Z(std::string & sym){
+int sym_to_z(std::string & sym){
     // TODO more idiomatic handling of species. Ask Ryan
     if (sym == "H")   return 1;
     if (sym == "He")  return 2;

@@ -52,21 +52,22 @@ add_kim_api_model_driver_library(
 include_directories(/home/amit/Projects/COLABFIT/colabfit-kim-model/colabfit-descriptor-library)
 SET(CMAKE_SKIP_BUILD_RPATH  FALSE)
 
-# TODO re-enable subdirectory for ML model, as otherwise compilation is lot slower
 add_subdirectory(MLModel)
 
 
 target_sources(${PROJECT_NAME} PRIVATE
         TorchMLModelDriver.cpp
+        TorchMLModelDriverImplementation.cpp
 )
 
 target_link_libraries("${PROJECT_NAME}" PRIVATE MLModel PRIVATE ${TORCH_LIBRARIES})
 target_link_libraries("${PROJECT_NAME}" PRIVATE TorchScatter::TorchScatter)
 target_link_libraries("${PROJECT_NAME}" PRIVATE TorchSparse::TorchSparse)
 
-target_include_directories("${PROJECT_NAME}" PRIVATE
-  "${PROJECT_BINARY_DIR}"
-  "${PROJECT_SOURCE_DIR}/MLModel")
+target_include_directories(
+        "${PROJECT_NAME}" PRIVATE
+        "${PROJECT_BINARY_DIR}"
+        "${PROJECT_SOURCE_DIR}/MLModel")
 
 # Suppress annoying Variable not used warnings, parameter still warns :(
 add_compile_options(-Wno-unused-variable -Wno-unused-parameter)

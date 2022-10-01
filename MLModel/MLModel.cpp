@@ -110,7 +110,7 @@ void PytorchModel::SetInputNode(int model_input_index, double *input, int size,
     model_inputs_[model_input_index] = input_tensor;
 }
 
-void PytorchModel::SetInputNode(int model_input_index, double *input, std::vector<int>& size,
+void PytorchModel::SetInputNode(int model_input_index, double *input, std::vector<int> &size,
                                 bool requires_grad) {
 
     torch::Dtype torch_dtype = get_torch_data_type(input);
@@ -128,17 +128,17 @@ void PytorchModel::SetInputNode(int model_input_index, double *input, std::vecto
 }
 
 void PytorchModel::SetInputNode(int model_input_index, int layer,
-                                int size, long ** const unrolled_graph) {
-    long * edge_index_array = unrolled_graph[layer];
+                                int size, long **const unrolled_graph) {
+    long *edge_index_array = unrolled_graph[layer];
     torch::Dtype torch_dtype = torch::kLong;//get_torch_data_type(edge_index_array);
     torch::TensorOptions tensor_options = torch::TensorOptions().dtype(torch_dtype);
     torch::Tensor edge_index =
-            torch::from_blob(edge_index_array,{2,size},tensor_options).to(*device_);
+            torch::from_blob(edge_index_array, {2, size}, tensor_options).to(*device_);
     model_inputs_[model_input_index] = edge_index;
-};
+}
 
 
-void PytorchModel::Run(c10::IValue& out_tensor) {
+void PytorchModel::Run(c10::IValue &out_tensor) {
     // FIXME: Make this work for arbitrary number/type of outputs?  This may
     // lead us to make Run() take no parameters, and instead define separate
     // methods for accessing each of the outputs of the ML model.
@@ -148,25 +148,6 @@ void PytorchModel::Run(c10::IValue& out_tensor) {
     // method return a tuple where the energy is the first entry and
     // the forces are the second
 
-//    std::vector<c10::IValue> output_tensor_list;
-//    const auto output_tensor_list_tmp =
-//            module_.forward(model_inputs_).toTuple()->elements();
-//    for (auto tensor: output_tensor_list_tmp) {
-//        output_tensor_list.push_back(tensor);
-//    }
-    // After moving the first output tensor back to the CPU (if necessary),
-    // extract its value as the partial energy
-//    *energy =
-//            *output_tensor_list[0].toTensor().to(torch::kCPU).data_ptr<double>();
-
-    // After moving the second output tensor back to the CPU (if necessary),
-    // extract its contents as the partial forces
-//    auto torch_forces = output_tensor_list[1].toTensor().to(torch::kCPU);
-//    // TODO: Move the accessor data extraction to a separate private method
-//    auto force_accessor = torch_forces.accessor<double, 1>();
-//    for (int atom_count = 0; atom_count < force_accessor.size(0); ++atom_count) {
-//        forces[atom_count] = force_accessor[atom_count];
-//    }
     out_tensor = module_.forward(model_inputs_);
 }
 
@@ -183,17 +164,6 @@ PytorchModel::PytorchModel(const char *model_file_path, const char *device_name,
         throw;
     }
 
-    // Check if model contain descriptor information
-//    for (auto named_variable: module_.named_attributes()) {
-//        if (named_variable.name == "descriptor") {
-//            auto descriptor_string_val = (*named_variable.value.toString()).string();
-//            if (!descriptor_string_val.empty()) {
-//                descriptor_required = true;
-//                descriptor_function = descriptor_string_val;
-//            }
-//        }
-//    }
-
     SetExecutionDevice(device_name);
 
     // Copy model to execution device
@@ -202,24 +172,24 @@ PytorchModel::PytorchModel(const char *model_file_path, const char *device_name,
     // Reserve size for the four fixed model inputs (particle_contributing,
     // coordinates, number_of_neighbors, neighbor_list)
     // Model inputs to be determined
-     model_inputs_.resize(size_);
+    model_inputs_.resize(size_);
 
     // Set model to evaluation mode to set any dropout or batch normalization
     // layers to evaluation mode
     module_.eval();
 }
 
-void PytorchModel::GetInputNode(c10::IValue & out_tensor) {
+void PytorchModel::GetInputNode(c10::IValue &out_tensor) {
     // return first tensor with grad = True
-    for (auto & Ival: model_inputs_){
-        if (Ival.toTensor().requires_grad()){
+    for (auto &Ival: model_inputs_) {
+        if (Ival.toTensor().requires_grad()) {
             out_tensor = Ival;
             return;
         }
     }
 }
 
-void PytorchModel::GetInputNode(int index, c10::IValue & out_tensor) {
+void PytorchModel::GetInputNode(int index, c10::IValue &out_tensor) {
     // return first tensor with grad = True
     out_tensor = model_inputs_[index];
 }

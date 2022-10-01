@@ -44,13 +44,14 @@ public:
                               int /*size*/, bool requires_grad = false) = 0;
 
     virtual void SetInputNode(int /*model_input_index*/, double * /*input*/,
-                      std::vector<int>& /*arb size*/, bool requires_grad = false) = 0;
+                              std::vector<int> & /*arb size*/, bool requires_grad = false) = 0;
 
     virtual void SetInputNode(int /*model_input_index*/, int /*layer number*/,
-                              int /*size of graph edge index*/ , long **) = 0;
+                              int /*size of graph edge index*/, long **) = 0;
 
     virtual void GetInputNode(int /*model_input_index*/, c10::IValue &) = 0;
-    virtual void GetInputNode( c10::IValue &) = 0;
+
+    virtual void GetInputNode(c10::IValue &) = 0;
 
     virtual void Run(c10::IValue &) = 0;
 
@@ -90,18 +91,19 @@ public:
                       int /*size*/, bool requires_grad = false);
 
     void SetInputNode(int /*model_input_index*/, double * /*input*/,
-                      std::vector<int>& /*arb size*/, bool requires_grad = false);
+                      std::vector<int> & /*arb size*/, bool requires_grad = false);
 
     void SetInputNode(int /*model_input_index*/, int /*layer number*/,
-                      int /*size of graph edge index*/ , long **);
+                      int /*size of graph edge index*/, long **);
 
     void GetInputNode(int /*model_input_index*/, c10::IValue &);
+
     void GetInputNode(c10::IValue &);
 
     void SetInputSize(int /*input size*/);
 
 //    void Run(double * /*energy*/, double * /*forces*/);
-    void Run(c10::IValue&);
+    void Run(c10::IValue &);
 
     ~PytorchModel();
 };

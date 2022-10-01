@@ -417,6 +417,10 @@ void TorchMLModelDriver::setDescriptorInputs(const KIM::ModelComputeArguments *m
 
     updateNeighborList(modelComputeArguments, n_contributing_atoms);
 
+    if (descriptor_array){
+        delete[] descriptor_array;
+        descriptor_array = nullptr;
+    }
     descriptor_array = new double[n_contributing_atoms * width];
     for (int i = 0; i < n_contributing_atoms; i++) {
         for (int j = i * width; j < (i + 1) * width; j++) { descriptor_array[j] = 0.; }
@@ -501,6 +505,11 @@ void TorchMLModelDriver::setGraphInputs(const KIM::ModelComputeArguments *modelC
     }
     graph_set_to_graph_array(unrolled_graph);
 
+    if (species_atomic_number){
+        delete[] species_atomic_number;
+        species_atomic_number = nullptr;
+    }
+
     species_atomic_number = new int[*numberOfParticlesPointer];
     for (int i = 0; i < *numberOfParticlesPointer; i++){
         species_atomic_number[i] =  z_map[particleSpeciesCodes[i]];
@@ -514,6 +523,11 @@ void TorchMLModelDriver::setGraphInputs(const KIM::ModelComputeArguments *modelC
 
     for (int i = 0; i < n_layers; i++) {
         mlModel->SetInputNode(2 + i, i, static_cast<int>(unrolled_graph[i].size()), graph_edge_indices);
+    }
+
+    if (contraction_array){
+        delete[] contraction_array;
+        contraction_array = nullptr;
     }
 
     contraction_array = new int64_t [*numberOfParticlesPointer];
@@ -801,10 +815,17 @@ int TorchMLModelDriver::ComputeArgumentsDestroy(
 // ---------------------------------------------------------------------------------
 void TorchMLModelDriver::graph_set_to_graph_array(std::vector<std::set<std::tuple<long, long>>> &
 unrolled_graph) {
+
+
     int i = 0;
     for (auto const &edge_index_set: unrolled_graph) {
         int j = 0;
         int graph_size = static_cast<int>(edge_index_set.size());
+        // Sanitize previous graph
+        if (graph_edge_indices[i]){
+            delete [] graph_edge_indices[i];
+            graph_edge_indices[i] = nullptr;
+        }
         graph_edge_indices[i] = new long[graph_size * 2];
         for (auto bond_pair: edge_index_set) {
             graph_edge_indices[i][j] = std::get<0>(bond_pair);
@@ -842,12 +863,12 @@ void TorchMLModelDriver::contributingAtomCounts(const KIM::ModelComputeArguments
 
 // *****************************************************************************
 TorchMLModelDriver::~TorchMLModelDriver() {
-    delete descriptor_array;
+    delete[] descriptor_array;
     if (preprocessing == "Graph") {
-        for (int i = 0; i < n_layers; i++) delete graph_edge_indices[i];
+        for (int i = 0; i < n_layers; i++) delete[] graph_edge_indices[i];
     }
-    delete graph_edge_indices;
-    delete descriptor;
-    delete species_atomic_number;
-    delete contraction_array;
+    delete[] graph_edge_indices;
+    delete[] descriptor;
+    delete[] species_atomic_number;
+    delete[] contraction_array;
 }

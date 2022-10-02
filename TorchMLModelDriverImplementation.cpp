@@ -240,16 +240,16 @@ void TorchMLModelDriverImplementation::postprocessOutputs(c10::IValue &out_tenso
             }
             for (int i = 0; i < *numberOfParticlesPointer; i++) {
                 // forces = -grad
-                *(forces + i) *= -1.0;
-                *(forces + i + 1) *= -1.0;
-                *(forces + i + 2) *= -1.0;
+                *(forces + 3 * i + 0) *= -1.0;
+                *(forces + 3 * i + 1) *= -1.0;
+                *(forces + 3 * i + 2) *= -1.0;
             }
         } else {
             auto force_accessor = input_grad.accessor<double, 2>();
             for (int i = 0; i < force_accessor.size(0); ++i) {
-                *(forces + i + 0) = -force_accessor[i][0];
-                *(forces + i + 1) = -force_accessor[i][1];
-                *(forces + i + 2) = -force_accessor[i][2];
+                *(forces + 3 * i + 0) = -force_accessor[i][0];
+                *(forces + 3 * i + 1) = -force_accessor[i][1];
+                *(forces + 3 * i + 2) = -force_accessor[i][2];
             }
         }
     }

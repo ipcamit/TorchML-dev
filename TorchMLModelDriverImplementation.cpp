@@ -124,7 +124,13 @@ int TorchMLModelDriverImplementation::ComputeArgumentsCreate(
     LOG_INFORMATION("Compute argument create");
     int error = modelComputeArgumentsCreate->SetArgumentSupportStatus(
             KIM::COMPUTE_ARGUMENT_NAME::partialEnergy,
-            KIM::SUPPORT_STATUS::optional)
+            KIM::SUPPORT_STATUS::required)
+                    // Support state can be optional for energy
+                    // But then we need to explicitly handle nullptr case
+                    // As energy is anyway always needs to be computed
+                    // as a prerequisite for force computation, easier to
+                    // make it required.
+                    // TODO: Handle it properly in future for GD models
                 || modelComputeArgumentsCreate->SetArgumentSupportStatus(
             KIM::COMPUTE_ARGUMENT_NAME::partialForces,
             KIM::SUPPORT_STATUS::optional);
@@ -164,6 +170,9 @@ void TorchMLModelDriverImplementation::preprocessInputs(KIM::ModelComputeArgumen
 }
 
 // -----------------------------------------------------------------------------
+#undef KIM_LOGGER_OBJECT_NAME
+#define KIM_LOGGER_OBJECT_NAME modelComputeArguments
+
 void TorchMLModelDriverImplementation::postprocessOutputs(c10::IValue &out_tensor,
                                                           KIM::ModelComputeArguments const *modelComputeArguments) {
 
@@ -171,7 +180,6 @@ void TorchMLModelDriverImplementation::postprocessOutputs(c10::IValue &out_tenso
     double *forces = nullptr;
     int const *numberOfParticlesPointer;
     int *particleSpeciesCodes; // FIXME: Implement species code handling
-    int *particleContributing = nullptr;
     double *coordinates = nullptr;
 
     auto ier = modelComputeArguments->GetArgumentPointer(
@@ -180,9 +188,6 @@ void TorchMLModelDriverImplementation::postprocessOutputs(c10::IValue &out_tenso
                || modelComputeArguments->GetArgumentPointer(
             KIM::COMPUTE_ARGUMENT_NAME::particleSpeciesCodes,
             &particleSpeciesCodes)
-               || modelComputeArguments->GetArgumentPointer(
-            KIM::COMPUTE_ARGUMENT_NAME::particleContributing,
-            &particleContributing)
                || modelComputeArguments->GetArgumentPointer(
             KIM::COMPUTE_ARGUMENT_NAME::coordinates,
             (double const **) &coordinates)

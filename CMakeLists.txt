@@ -54,7 +54,6 @@ SET(CMAKE_SKIP_BUILD_RPATH  FALSE)
 
 add_subdirectory(MLModel)
 
-
 target_sources(${PROJECT_NAME} PRIVATE
         TorchMLModelDriver.cpp
         TorchMLModelDriverImplementation.cpp
@@ -71,5 +70,6 @@ target_include_directories(
 
 # Suppress annoying Variable not used warnings, parameter still warns :(
 add_compile_options(-Wno-unused-variable -Wno-unused-parameter)
-find_library(DESC_LIB descriptor HINTS /home/amit/Projects/COLABFIT/colabfit-kim-model/colabfit-descriptor-library/cmake-build-debug-clang12)
+find_library(DESC_LIB descriptor HINTS
+        /home/amit/Projects/COLABFIT/colabfit-kim-model/colabfit-descriptor-library/cmake-build-release-clang12)
 target_link_libraries("${PROJECT_NAME}" PRIVATE ${TORCH_LIBRARIES} ${DESC_LIB})

@@ -7,8 +7,10 @@
 
 #include "KIM_ModelDriverHeaders.hpp"
 #include "MLModel.hpp"
-#include "descriptors.hpp"
+#include "Descriptors.hpp"
 #include <torch/torch.h>
+
+using namespace Descriptor;
 
 class TorchMLModelDriverImplementation {
 public:
@@ -53,7 +55,8 @@ private:
 
     MLModel *mlModel;
 
-    Descriptor *descriptor;
+    AvailableDescriptor descriptor_kind;
+    DescriptorKind *descriptor;
 
     std::vector<int> num_neighbors_;
     std::vector<int> neighbor_list;

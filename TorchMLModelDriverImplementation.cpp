@@ -4,6 +4,7 @@
 #include <map>
 #include <vector>
 #include <algorithm>
+#include <stdexcept>
 
 #define MAX_FILE_NUM 3
 //typedef double VecOfSize3[3];
@@ -81,7 +82,7 @@ TorchMLModelDriverImplementation::TorchMLModelDriverImplementation(
 
     // Set preprocessor descriptor callbacks --------------------------------------------------
     if (preprocessing == "Descriptor") {
-        descriptor = new Descriptor(descriptor_name, descriptor_param_file);
+        descriptor = DescriptorKind::initDescriptor(descriptor_param_file, descriptor_kind);
         graph_edge_indices = nullptr;
     } else if (preprocessing == "Graph") {
         graph_edge_indices = new long *[n_layers];
@@ -94,6 +95,7 @@ TorchMLModelDriverImplementation::TorchMLModelDriverImplementation(
     descriptor_array = nullptr;
     species_atomic_number = nullptr;
     contraction_array = nullptr;
+    std::cout << "Initialized\n";
 
 }
 
@@ -209,40 +211,44 @@ void TorchMLModelDriverImplementation::postprocessOutputs(c10::IValue &out_tenso
             forces[atom_count] = -force_accessor[atom_count];
         }
     } else {
-        if (preprocessing == "Descriptor") {
-            std::cout << "SUMMING UP ENERGIES. THIS WILL BE REMOVED. SUM YOUR OWN ENERGIES\n";
-            out_tensor.toTensor().sum().backward();
-        } else {
-            out_tensor.toTensor().backward();
-        }
+        // TODO: partial particle energy
+        // sum() leaves scalars intact, therefore can be used here
+        // but in future scalar and vector tensors will be handled differently
+        // to ensure proper handling of partial particle energy parameter from KIM
+        out_tensor.toTensor().sum().backward();
+        std::cout << "Took Backwards\n";
+        std::cout << out_tensor.toTensor().sum();
         c10::IValue input_tensor;
         mlModel->GetInputNode(input_tensor);
         auto input_grad = input_tensor.toTensor().grad();
+//        std::cout << input_grad;
         *energy = *out_tensor.toTensor().to(torch::kCPU).data_ptr<double>();
         int neigh_from = 0;
         int n_neigh;
         if (preprocessing == "Descriptor") {
-            // TODO this is temporary hard coded fix. Need to improve it by inheriting Base
-            // descriptor class in all descriptors. **Priority**
-            std::cout << "USING SYMFUN WORKAROUND. FIX ME ASAP" << "\n";
-            auto sf = reinterpret_cast<SymmetryFunctionParams *>(descriptor->descriptor_map["SymmetryFunction"]);
-            int width = sf->width;
-            //
+            int width = descriptor->width;
+            std::cout << "Width in post " << width <<"\n";
             for (int i = 0; i < n_contributing_atoms; i++) {
                 n_neigh = num_neighbors_[i];
                 std::vector<int> n_list(neighbor_list.begin() + neigh_from,
                                         neighbor_list.begin() + neigh_from + n_neigh);
                 neigh_from += n_neigh;
-                grad_symmetry_function_atomic(i,
-                                              coordinates,
-                                              forces,
-                                              particleSpeciesCodes,
-                                              n_list.data(),
-                                              n_neigh,
-                                              input_tensor.toTensor().data_ptr<double>() + (i * width),
-                                              input_grad.data_ptr<double>() + (i * width),
-                                              sf);
+                // Single atom gradient from descriptor
+                // TODO: call gradient function, which handles atom-wise iteration
+                std::cout << "Grad: " << i << "\n";
+                gradient_single_atom(i,
+                                     *particleSpeciesCodes,
+                                     particleSpeciesCodes,
+                                     n_list.data(),
+                                     n_neigh,
+                                     coordinates,
+                                     forces,
+                                     input_tensor.toTensor().data_ptr<double>() + (i * width),
+                                     input_grad.data_ptr<double>() + (i * width),
+                                     descriptor);
+
             }
+            std::cout << "Computed gradients\n";
             for (int i = 0; i < *numberOfParticlesPointer; i++) {
                 // forces = -grad
                 *(forces + 3 * i + 0) *= -1.0;
@@ -342,37 +348,36 @@ void TorchMLModelDriverImplementation::setDescriptorInputs(const KIM::ModelCompu
     }
     int neigh_from, n_neigh;
     neigh_from = 0;
-
-    // Initialize descriptors on the basis of function
-//    auto option = torch::TensorOptions().dtype(torch::kFloat64).requires_grad(true);
-
-    // TODO this is temporary hard coded fix. Need to improve it by inheriting Base
-    // descriptor class in all descriptors. **Priority**
-    std::cout << "USING SYMFUN WORKAROUND. FIX ME ASAP" << "\n";
-    auto sf = reinterpret_cast<SymmetryFunctionParams *>(descriptor->descriptor_map["SymmetryFunction"]);
-    int width = sf->width;
-    //
-
+    int width = descriptor->width;
+    std::cout << "Accessed width\n";
     updateNeighborList(modelComputeArguments, n_contributing_atoms);
-
+    std::cout << "updated neighbors\n";
     if (descriptor_array) {
         delete[] descriptor_array;
         descriptor_array = nullptr;
     }
+    std::cout << "Erased prev allocation\n";
+    std::cout << n_contributing_atoms <<"   " << width <<"\n";
     descriptor_array = new double[n_contributing_atoms * width];
+    std::cout << "allocated descriptor\n";
     for (int i = 0; i < n_contributing_atoms; i++) {
         for (int j = i * width; j < (i + 1) * width; j++) { descriptor_array[j] = 0.; }
         n_neigh = num_neighbors_[i];
         std::vector<int> n_list(neighbor_list.begin() + neigh_from, neighbor_list.begin() + neigh_from + n_neigh);
         neigh_from += n_neigh;
-        symmetry_function_atomic(i,
-                                 coordinates,
-                                 particleSpeciesCodes,
-                                 n_list.data(),
-                                 n_neigh,
-                                 descriptor_array + (i * width),
-                                 sf);
+        // Single atom descriptor wrapper from descriptor
+        // TODO: call compute function, which handles atom-wise iteration
+//        std::cout << "i: " << i <<"\n";
+        compute_single_atom(i,
+                            *numberOfParticlesPointer,
+                            particleSpeciesCodes,
+                            n_list.data(),
+                            n_neigh,
+                            coordinates,
+                            descriptor_array + (i * width),
+                            descriptor);
     }
+    std::cout << "Computed Descriptor\n";
     // auto descriptor_tensor = torch::from_blob(descriptor_array, {n_contributing_atoms, width}, option);
 
     std::vector<int> input_tensor_size({n_contributing_atoms, width});
@@ -618,7 +623,13 @@ void TorchMLModelDriverImplementation::readParametersFile(KIM::ModelDriverCreate
             // number of strings
             descriptor_name = placeholder_string;
             descriptor_param_file = *param_dir_name + "/" + *descriptor_file_name;
-            // TODO raise exception for missing or unfound descriptor if needed?
+            if (descriptor_name == "SymmetryFunctions"){
+                descriptor_kind = AvailableDescriptor::KindSymmetryFunctions;
+            } else if (descriptor_name == "Bispectrum"){
+                descriptor_kind = AvailableDescriptor::KindBispectrum;
+            } else {
+                throw std::invalid_argument("Descriptor not supported.");
+            }
         }
 
     } else {

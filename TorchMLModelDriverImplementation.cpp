@@ -221,8 +221,8 @@ void TorchMLModelDriverImplementation::postprocessOutputs(c10::IValue &out_tenso
         c10::IValue input_tensor;
         mlModel->GetInputNode(input_tensor);
         auto input_grad = input_tensor.toTensor().grad();
-//        std::cout << input_grad;
-        *energy = *out_tensor.toTensor().to(torch::kCPU).data_ptr<double>();
+        std::cout << input_grad;
+        *energy = *out_tensor.toTensor().sum().to(torch::kCPU).data_ptr<double>();
         int neigh_from = 0;
         int n_neigh;
         if (preprocessing == "Descriptor") {
@@ -235,9 +235,9 @@ void TorchMLModelDriverImplementation::postprocessOutputs(c10::IValue &out_tenso
                 neigh_from += n_neigh;
                 // Single atom gradient from descriptor
                 // TODO: call gradient function, which handles atom-wise iteration
-                std::cout << "Grad: " << i << "\n";
+//                std::cout << "Grad: " << i << "\n";
                 gradient_single_atom(i,
-                                     *particleSpeciesCodes,
+                                     n_contributing_atoms,
                                      particleSpeciesCodes,
                                      n_list.data(),
                                      n_neigh,
@@ -369,7 +369,7 @@ void TorchMLModelDriverImplementation::setDescriptorInputs(const KIM::ModelCompu
         // TODO: call compute function, which handles atom-wise iteration
 //        std::cout << "i: " << i <<"\n";
         compute_single_atom(i,
-                            *numberOfParticlesPointer,
+                            n_contributing_atoms,
                             particleSpeciesCodes,
                             n_list.data(),
                             n_neigh,
@@ -825,6 +825,7 @@ TorchMLModelDriverImplementation::~TorchMLModelDriverImplementation() {
     delete descriptor;
     delete[] species_atomic_number;
     delete[] contraction_array;
+    std::cout << "Destroyed object\n";
 }
 
 // *****************************************************************************

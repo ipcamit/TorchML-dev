@@ -95,7 +95,6 @@ TorchMLModelDriverImplementation::TorchMLModelDriverImplementation(
     descriptor_array = nullptr;
     species_atomic_number = nullptr;
     contraction_array = nullptr;
-    std::cout << "Initialized\n";
 
 }
 
@@ -216,18 +215,14 @@ void TorchMLModelDriverImplementation::postprocessOutputs(c10::IValue &out_tenso
         // but in future scalar and vector tensors will be handled differently
         // to ensure proper handling of partial particle energy parameter from KIM
         out_tensor.toTensor().sum().backward();
-        std::cout << "Took Backwards\n";
-        std::cout << out_tensor.toTensor().sum();
         c10::IValue input_tensor;
         mlModel->GetInputNode(input_tensor);
         auto input_grad = input_tensor.toTensor().grad();
-        std::cout << input_grad;
         *energy = *out_tensor.toTensor().sum().to(torch::kCPU).data_ptr<double>();
         int neigh_from = 0;
         int n_neigh;
         if (preprocessing == "Descriptor") {
             int width = descriptor->width;
-            std::cout << "Width in post " << width <<"\n";
             for (int i = 0; i < n_contributing_atoms; i++) {
                 n_neigh = num_neighbors_[i];
                 std::vector<int> n_list(neighbor_list.begin() + neigh_from,
@@ -235,7 +230,6 @@ void TorchMLModelDriverImplementation::postprocessOutputs(c10::IValue &out_tenso
                 neigh_from += n_neigh;
                 // Single atom gradient from descriptor
                 // TODO: call gradient function, which handles atom-wise iteration
-//                std::cout << "Grad: " << i << "\n";
                 gradient_single_atom(i,
                                      n_contributing_atoms,
                                      particleSpeciesCodes,
@@ -248,7 +242,6 @@ void TorchMLModelDriverImplementation::postprocessOutputs(c10::IValue &out_tenso
                                      descriptor);
 
             }
-            std::cout << "Computed gradients\n";
             for (int i = 0; i < *numberOfParticlesPointer; i++) {
                 // forces = -grad
                 *(forces + 3 * i + 0) *= -1.0;
@@ -349,17 +342,12 @@ void TorchMLModelDriverImplementation::setDescriptorInputs(const KIM::ModelCompu
     int neigh_from, n_neigh;
     neigh_from = 0;
     int width = descriptor->width;
-    std::cout << "Accessed width\n";
     updateNeighborList(modelComputeArguments, n_contributing_atoms);
-    std::cout << "updated neighbors\n";
     if (descriptor_array) {
         delete[] descriptor_array;
         descriptor_array = nullptr;
     }
-    std::cout << "Erased prev allocation\n";
-    std::cout << n_contributing_atoms <<"   " << width <<"\n";
     descriptor_array = new double[n_contributing_atoms * width];
-    std::cout << "allocated descriptor\n";
     for (int i = 0; i < n_contributing_atoms; i++) {
         for (int j = i * width; j < (i + 1) * width; j++) { descriptor_array[j] = 0.; }
         n_neigh = num_neighbors_[i];
@@ -367,7 +355,6 @@ void TorchMLModelDriverImplementation::setDescriptorInputs(const KIM::ModelCompu
         neigh_from += n_neigh;
         // Single atom descriptor wrapper from descriptor
         // TODO: call compute function, which handles atom-wise iteration
-//        std::cout << "i: " << i <<"\n";
         compute_single_atom(i,
                             n_contributing_atoms,
                             particleSpeciesCodes,
@@ -377,8 +364,6 @@ void TorchMLModelDriverImplementation::setDescriptorInputs(const KIM::ModelCompu
                             descriptor_array + (i * width),
                             descriptor);
     }
-    std::cout << "Computed Descriptor\n";
-    // auto descriptor_tensor = torch::from_blob(descriptor_array, {n_contributing_atoms, width}, option);
 
     std::vector<int> input_tensor_size({n_contributing_atoms, width});
     mlModel->SetInputNode(0, descriptor_array, input_tensor_size, true);
@@ -825,7 +810,6 @@ TorchMLModelDriverImplementation::~TorchMLModelDriverImplementation() {
     delete descriptor;
     delete[] species_atomic_number;
     delete[] contraction_array;
-    std::cout << "Destroyed object\n";
 }
 
 // *****************************************************************************

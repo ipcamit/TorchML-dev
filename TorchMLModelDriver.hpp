@@ -14,6 +14,14 @@ int model_driver_create(KIM::ModelDriverCreate *modelDriverCreate,
 
 class TorchMLModelDriverImplementation;
 
+/*
+ * Core model driver class.
+ *
+ * As per other KIM model driver examples, TorchMLModel driver follows a PIMPL model, which abstracts away implementation
+ * to a separate implementation class. So other than the core skeleton functions, required by the KIM-API, this class
+ * does not contain any details.
+ *
+ */
 class TorchMLModelDriver {
 public:
     TorchMLModelDriver(KIM::ModelDriverCreate *modelDriverCreate,
@@ -42,6 +50,7 @@ public:
     ~TorchMLModelDriver();
 
 private:
+    //! Pointer to ML model driver implementation
     TorchMLModelDriverImplementation *implementation_;
 
 };

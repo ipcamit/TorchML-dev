@@ -54,3 +54,18 @@ export TorchSparse_DIR="/home/colabfit-model-driver/torch_geometric_dependencies
 
 ```
 TODO: append the outputs
+
+## Enabling GPU Support
+To enable evaluation of the Torch Model on GPU, set the `KIM_MODEL_EXECUTION_DEVICE` environment variable to `cuda`
+```shell
+export KIM_MODEL_EXECUTION_DEVICE="cuda"
+
+# Set visible devices if needed
+export CUDA_VISIBLE_DEVICES=1
+```
+Because KIM model driver, if inherently compatible with LAMMPS domain decomposition, enabling distributed
+GPU support is as simple as just running LAMMPS with multiple ranks.
+Also, at present Torch model resides on GPU, independent of the LAMMPS, so following points shall be kept in mind
+1. You need not compile LAMMPS with GPU enabled, model driver only interacts with LAMMPS via KIM, which is CPU only
+2. As every evaluation needs copying data from CPU to GPU and vice versa, so to see benefits of GPU you might need 
+system of substantial size.

@@ -33,7 +33,11 @@ git clone https:github.com/ipcamit/colabfit-model-driver
 kim-api-collections-management install user colabfit-model-driver
 ```
 That is it! if all dependencies are met, that is all you need to make it work. Your shell environment should provide
-require variables for dependency resolution (such as `Torch_ROOT` `TorchScatter_ROOT` `TorchSparse_ROOT` etc.).
+require variables for dependency resolution namely,
+1. `TORCH_ROOT` 
+2. `TorchScatter_ROOT` 
+3. `TorchSparse_ROOT`
+4. `LIBDESCRIPTOR_ROOT`
 
 `libtorch` is simple to install, you need not build it from source, but rather just download them libtorch binaries from
 PyTorch website, and put them at appropriate system paths.

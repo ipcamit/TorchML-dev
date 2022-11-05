@@ -73,3 +73,14 @@ Also, at present Torch model resides on GPU, independent of the LAMMPS, so follo
 1. You need not compile LAMMPS with GPU enabled, model driver only interacts with LAMMPS via KIM, which is CPU only
 2. As every evaluation needs copying data from CPU to GPU and vice versa, so to see benefits of GPU you might need 
 system of substantial size.
+
+## Docker Support
+This repository also contains a Dockerfile that can be used to create a docker environment with full KIM Torch ML Model
+Driver installed, along with all the dependencies (`libtorch_cpu`, `libtorchscatter`, `libtorchsparse`, `libdescriptor`). 
+It is based on [KIM Developer Platform](https://github.com/openkim/developer-platform) docker image, hence comes pre-installed with LAMMPS and KIM-API.
+This result in > 5GB image, but it is one of the most the simplest way to install full driver on CPU, sadly it contains
+no GPU support, yet. 
+
+If you need to see some examples of portable models for KIMTorchMLModelDriver, please check [here](https://github.com/ipcamit/colabfit-portable-models).
+The linked repository contains three kind of models that are supported out of the box, along with three toy models for Si.
+Please note that these are very small toy models that should not see any serious work!

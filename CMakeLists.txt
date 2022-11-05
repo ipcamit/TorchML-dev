@@ -15,7 +15,11 @@ message("Build Type: ${CMAKE_BUILD_TYPE}")
 
 # KIM-API TORCH TorchScatter TorchSparse CMAKE FILES-------------------------
 if (NOT DEFINED KIM_ROOT)
-    set(KIM_ROOT $ENV{KIM_API_CMAKE_PREFIX_DIR})
+    if (DEFINED ENV{KIM_API_CMAKE_PREFIX_DIR})
+        set(KIM_ROOT $ENV{KIM_API_CMAKE_PREFIX_DIR})
+    else()
+        set(KIM_ROOT "/usr/local")
+    endif()
 endif()
 if (NOT DEFINED TORCH_ROOT)
     if (DEFINED ENV{TORCH_ROOT})

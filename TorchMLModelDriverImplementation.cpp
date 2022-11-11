@@ -807,7 +807,25 @@ TorchMLModelDriverImplementation::~TorchMLModelDriverImplementation() {
         for (int i = 0; i < n_layers; i++) delete[] graph_edge_indices[i];
     }
     delete[] graph_edge_indices;
-    delete descriptor;
+    // This will be a rather ugly temporary workaround. Will fix it once Enzyme provides solution
+    // https://github.com/EnzymeAD/Enzyme/issues/929
+    // TODO: URGENT Properly clean the descriptor kind
+    // delete descriptor;
+    if (descriptor) {
+        switch (descriptor->descriptor_kind) {
+            case AvailableDescriptor::KindSymmetryFunctions: {
+                auto tmp_recast = reinterpret_cast<SymmetryFunctions *>(descriptor);
+                delete tmp_recast;
+                break;
+            }
+
+            case AvailableDescriptor::KindBispectrum: {
+                auto tmp_recast = reinterpret_cast<Bispectrum *>(descriptor);
+                delete tmp_recast;
+                break;
+            }
+        }
+    }
     delete[] species_atomic_number;
     delete[] contraction_array;
 }

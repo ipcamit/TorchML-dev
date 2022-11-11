@@ -7,6 +7,8 @@ For actual application and "production", a specialized model driver can be easil
 unnecessary components (for example, see branch [`just-graph-nn`](https://github.com/ipcamit/colabfit-model-driver/tree/just-graph-nn) 
  for a minimal dependency GNN driver). 
 
+<img src="modelDriververticle.svg" width="800">
+
 ## Dependencies
 Model driver depends on several libraries for it to functions seamlessly. And it expects them to be
 provided by the user at runtime. The core requirement of ML model driver is `libtorch` library that provides the interface

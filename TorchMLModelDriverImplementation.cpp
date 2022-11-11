@@ -810,22 +810,24 @@ TorchMLModelDriverImplementation::~TorchMLModelDriverImplementation() {
     // This will be a rather ugly temporary workaround. Will fix it once Enzyme provides solution
     // https://github.com/EnzymeAD/Enzyme/issues/929
     // TODO: URGENT Properly clean the descriptor kind
-    // delete descriptor;
-    if (descriptor) {
-        switch (descriptor->descriptor_kind) {
-            case AvailableDescriptor::KindSymmetryFunctions: {
-                auto tmp_recast = reinterpret_cast<SymmetryFunctions *>(descriptor);
-                delete tmp_recast;
-                break;
-            }
-
-            case AvailableDescriptor::KindBispectrum: {
-                auto tmp_recast = reinterpret_cast<Bispectrum *>(descriptor);
-                delete tmp_recast;
-                break;
-            }
-        }
-    }
+    // Leaving it like this for now as it looks like the enzyme lib continue to function despite the
+    // issue. Will revisit in fututre
+     delete descriptor;
+//    if (descriptor) {
+//        switch (descriptor->descriptor_kind) {
+//            case AvailableDescriptor::KindSymmetryFunctions: {
+//                auto tmp_recast = reinterpret_cast<SymmetryFunctions *>(descriptor);
+//                delete tmp_recast;
+//                break;
+//            }
+//
+//            case AvailableDescriptor::KindBispectrum: {
+//                auto tmp_recast = reinterpret_cast<Bispectrum *>(descriptor);
+//                delete tmp_recast;
+//                break;
+//            }
+//        }
+//    }
     delete[] species_atomic_number;
     delete[] contraction_array;
 }

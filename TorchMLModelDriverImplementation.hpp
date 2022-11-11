@@ -12,8 +12,8 @@
 
 // TODO TEMP WORKAROUND TILL ENZYME FIXES BUG OR I SHIFT TO CLAD etc
 // SEE DESTRUCTOR FOR MORE DETAILS
-#include "SymmetryFunctions.hpp"
-#include "Bispectrum.hpp"
+//#include "SymmetryFunctions.hpp"
+//#include "Bispectrum.hpp"
 // --------------------------------------------
 
 using namespace Descriptor;

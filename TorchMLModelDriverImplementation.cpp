@@ -201,14 +201,17 @@ void TorchMLModelDriverImplementation::postprocessOutputs(c10::IValue &out_tenso
 
     if (ier) return;
 
+    // Pointer to array storing forces
+    double *force_accessor = nullptr;
+
     if (returns_forces) {
         const auto output_tensor_list = out_tensor.toTuple()->elements();
-        *energy = *output_tensor_list[0].toTensor().to(torch::kCPU).data_ptr<double>();
+        auto energy_sum = output_tensor_list[0].toTensor().to(torch::kCPU);
+        *energy = *(energy_sum.data_ptr<double>());
+
+        // As Ivalue array contains forces, give its pointer to force_accessor
         auto torch_forces = output_tensor_list[1].toTensor().to(torch::kCPU);
-        auto force_accessor = torch_forces.accessor<double, 1>();
-        for (int atom_count = 0; atom_count < force_accessor.size(0); ++atom_count) {
-            forces[atom_count] = -force_accessor[atom_count];
-        }
+        force_accessor = torch_forces.data_ptr<double>();
     } else {
         // TODO: partial particle energy
         // sum() leaves scalars intact, therefore can be used here
@@ -217,12 +220,16 @@ void TorchMLModelDriverImplementation::postprocessOutputs(c10::IValue &out_tenso
         out_tensor.toTensor().sum().backward();
         c10::IValue input_tensor;
         mlModel->GetInputNode(input_tensor);
-        auto input_grad = input_tensor.toTensor().grad();
-        *energy = *out_tensor.toTensor().sum().to(torch::kCPU).data_ptr<double>();
+        auto input_grad = input_tensor.toTensor().grad().to(torch::kCPU);
+        auto energy_sum =out_tensor.toTensor().sum().to(torch::kCPU);
+        *energy = *(energy_sum.data_ptr<double>());
         int neigh_from = 0;
         int n_neigh;
         if (preprocessing == "Descriptor") {
             int width = descriptor->width;
+            // allocate memory to access forces, and give the location to force_accessor
+            force_accessor = new double [*numberOfParticlesPointer * 3];
+            for (int i = 0; i < *numberOfParticlesPointer * 3; i++) {force_accessor[i] = 0.0;}
             for (int i = 0; i < n_contributing_atoms; i++) {
                 n_neigh = num_neighbors_[i];
                 std::vector<int> n_list(neighbor_list.begin() + neigh_from,
@@ -236,26 +243,27 @@ void TorchMLModelDriverImplementation::postprocessOutputs(c10::IValue &out_tenso
                                      n_list.data(),
                                      n_neigh,
                                      coordinates,
-                                     forces,
+                                     force_accessor,
                                      input_tensor.toTensor().data_ptr<double>() + (i * width),
                                      input_grad.data_ptr<double>() + (i * width),
                                      descriptor);
 
             }
-            for (int i = 0; i < *numberOfParticlesPointer; i++) {
-                // forces = -grad
-                *(forces + 3 * i + 0) *= -1.0;
-                *(forces + 3 * i + 1) *= -1.0;
-                *(forces + 3 * i + 2) *= -1.0;
-            }
         } else {
-            auto force_accessor = input_grad.accessor<double, 2>();
-            for (int i = 0; i < force_accessor.size(0); ++i) {
-                *(forces + 3 * i + 0) = -force_accessor[i][0];
-                *(forces + 3 * i + 1) = -force_accessor[i][1];
-                *(forces + 3 * i + 2) = -force_accessor[i][2];
-            }
+            // If Torch has performed gradient, then force accessor is simply input gradient
+            force_accessor = input_grad.data_ptr<double>();
         }
+    }
+    // forces = -grad
+    for (int i = 0; i < *numberOfParticlesPointer; ++i) {
+        *(forces + 3 * i + 0) = -*(force_accessor + 3 * i + 0);
+        *(forces + 3 * i + 1) = -*(force_accessor + 3 * i + 1);
+        *(forces + 3 * i + 2) = -*(force_accessor + 3 * i + 2);
+    }
+
+    // Clean memory if Descriptor allocated it
+    if (preprocessing=="Descriptor"){
+        delete [] force_accessor;
     }
 }
 

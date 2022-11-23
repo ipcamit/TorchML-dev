@@ -67,14 +67,64 @@ To enable evaluation of the Torch Model on GPU, set the `KIM_MODEL_EXECUTION_DEV
 export KIM_MODEL_EXECUTION_DEVICE="cuda"
 
 # Set visible devices if needed
-export CUDA_VISIBLE_DEVICES=1
+export CUDA_VISIBLE_DEVICES=0
 ```
-Because KIM model driver, if inherently compatible with LAMMPS domain decomposition, enabling distributed
+Because KIM model driver is inherently compatible with LAMMPS domain decomposition, enabling distributed
 GPU support is as simple as just running LAMMPS with multiple ranks.
 Also, at present Torch model resides on GPU, independent of the LAMMPS, so following points shall be kept in mind
 1. You need not compile LAMMPS with GPU enabled, model driver only interacts with LAMMPS via KIM, which is CPU only
 2. As every evaluation needs copying data from CPU to GPU and vice versa, so to see benefits of GPU you might need 
 system of substantial size.
+
+## Caveats
+### Compiling and libcuda error
+Sometimes in HPC environment you might get an error during installation, stating
+
+```
+Unable to open shared library.
+libcuda.so.1: cannot open shared object file: No such file or directory
+```
+This usually happens because `libtorch` tries to link against a shared library named `libcuda.so`, but it seems that
+in CUDA that library has been deprecated in favor of `libcudart.so`. You can overcome it in two ways
+1. During compile time add `/path/to/cuda/lib64/stubs` to your `LD_LIBRARY_PATH` env variable. This links against the stub
+`libcuda` library. 
+2. In case the `stubs` is not installed on your system, you can simply symlink to `libcudart` as 
+`ln -s /path/to/cuda/lib64/libcudart.so libcuda.so.1` before kim install. 
+
+Please not that you might run in issues if `stubs` folder is present in `LD_LIBRARY_PATH` or `libcuda.so.1` 
+link is present at runtime. So better to ensure that is not the case when submitting the job, by either using a 
+fresh bash shell or removing `libcuda.so.1` link after installation.
+
+### Multiple GPU
+Two of the following MPI-GPU configurations work out of the box, and need no changes or modification
+1. 1 MPI rank per node, with 1 GPU per rank (1 MPI rank per GPU, 1 GPU per per node)
+2. `n` MPI ranks on 1 node and 1 GPU per node (`n` MPI ranks on 1 GPU, only 1 node)
+
+Following hardware configurations are **not supported** yet,
+1. `n` GPU per `m` MPI ranks with `m != n`
+2. `n` GPU per `n` MPI ranks, but ranks per node not equal to 1
+
+In short, you need either you need all MPI ranks on same node, with single GPU, or you need 1 rank per node for `n` GPU spread across `n` nodes.
+
+---
+
+### _Note: only applicable to `just-graph-nn` branch_
+_Having multiple GPU per MPI rank is not supported yet and will waste resources by only using 1 GPU of the available pool.
+Better utilization would be to launch `n` MPI ranks per `n` GPU on the same node. For using `n` GPU with `n` ranks on
+same node, you need to build an MPI aware version of TorchMLModelDriver. This can be done by setting environment 
+variable `KIM_MODEL_MPI_AWARE` to `yes` (i.e. `export KIM_MODEL_MPI_AWARE=yes`). This would force CMake to look
+for MPI libraries and fail if it does not find it and pass `-DYESMPI` flag to the underlying compiler, which
+would accordingly compile appropriate routine. Then during runtime, model driver will now use `n` devices for `n` ranks 
+if `KIM_MODEL_MPI_AWARE` is set to `yes` at run time else revert to usual behavior if `KIM_MODEL_MPI_AWARE` is set
+to any other value, or undefined at run time._
+
+_To summarize, if you define an installation time env variable `KIM_MODEL_MPI_AWARE` you can enable same-node multi-GPU 
+support but then you will i) need MPI at compile time and ii) need to set `KIM_MODEL_MPI_AWARE` variable at run time
+as well for using it (else it will behave as normal driver.)_
+
+TODO: Enable MPI aware build option on main model driver
+
+---
 
 ## Docker Support
 This repository also contains a Dockerfile that can be used to create a docker environment with full KIM Torch ML Model

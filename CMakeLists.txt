@@ -95,6 +95,22 @@ else()
     set(ENABLE_LIBDESC OFF)
 endif()
 
+# Check if User needs MPI aware version of the model driver
+if (DEFINED ENV{KIM_MODEL_MPI_AWARE})
+    STRING(COMPARE EQUAL $ENV{KIM_MODEL_MPI_AWARE} "yes" flg)
+    if(flg)
+    # Find MPI
+    find_package(MPI)
+        if(MPI_FOUND)
+            message("MPI found, using MPI compilers to compile")
+            include_directories(SYSTEM ${MPI_INCLUDE_PATH})
+            set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_MPI")
+        else()
+            message(FATAL_ERROR "MPI not found, you requested MPI aware build, either provide MPI LIB or set KIM_MODEL_MPI_AWARE to no")
+        endif()
+    endif()
+endif()
+
 SET(CMAKE_SKIP_BUILD_RPATH  FALSE)
 
 # Add ML model directory
@@ -125,6 +141,14 @@ if(ENABLE_LIBDESC)
     target_link_libraries("${PROJECT_NAME}" PRIVATE "${LIBDESCRIPTOR_ROOT}/lib/libdescriptor.so")
 #    find_library(DESC_LIB descriptor HINTS "${LIBDESCRIPTOR_ROOT}/lib")
 #    target_link_libraries("${PROJECT_NAME}" PRIVATE ${TORCH_LIBRARIES} ${DESC_LIB})
+endif()
+
+# Link against MPI if needed
+if (DEFINED ENV{KIM_MODEL_MPI_AWARE})
+    STRING(COMPARE EQUAL $ENV{KIM_MODEL_MPI_AWARE} "yes" flg)
+    if(flg)
+        target_link_libraries(${PROJECT_NAME} PRIVATE ${MPI_CXX_LIBRARIES})
+    endif()
 endif()
 
 # Documentation and stuff ----------------------------------------------------------------

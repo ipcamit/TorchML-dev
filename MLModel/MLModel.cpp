@@ -4,6 +4,10 @@
 #include <stdexcept>
 #include "MLModel.hpp"
 
+#ifdef USE_MPI
+#include <mpi.h>
+#endif
+
 #include <torch/script.h>
 
 MLModel *MLModel::create(const char *model_file_path, MLModelType ml_model_type,
@@ -27,10 +31,25 @@ void PytorchModel::SetExecutionDevice(const char *const device_name) {
         device_name_as_str = "cpu";
     } else {
         device_name_as_str = device_name;
-    }
 
+        //Only compile if MPI is detected
+        //n devices for n ranks, it will crash if MPI != GPU
+        // TODO: Add a check if GPU aware MPI can be used
+        #ifdef USE_MPI
+        int rank=0, size = 0;
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+        MPI_Comm_size(MPI_COMM_WORLD, &size);
+        auto kim_model_mpi_aware_env_var = std::getenv("KIM_MODEL_MPI_AWARE");
+        if ((kim_model_mpi_aware_env_var != NULL) && (strcmp(kim_model_mpi_aware_env_var, "yes") == 0)){
+            device_name_as_str += ":";
+            device_name_as_str += std::to_string(rank);
+        }
+        #endif
+    }
     device_ = new torch::Device(device_name_as_str);
 }
+
+
 
 torch::Dtype PytorchModel::get_torch_data_type(int *) {
     // Get the size used by 'int' on this platform and set torch tensor type

@@ -104,16 +104,30 @@ Following hardware configurations are **not supported** yet,
 1. `n` GPU per `m` MPI ranks with `m != n`
 2. `n` GPU per `n` MPI ranks, but ranks per node not equal to 1
 
-In short, you need either you need all MPI ranks on same node, with single GPU, or you need 1 rank per node for `n` GPU spread across `n` nodes.
+In short, you need either you need all MPI ranks on same node, with single GPU, or you need 1 rank per node for `n` GPU
+spread across `n` nodes.
 
 ---
+
+### Optional Build options
+By default, the model driver tries to take a "maximal" approach to the dependencies, and tries to build all the required
+dependencies and features. However, you can disable some features by setting the following environment variables:
+1. `KIM_MODEL_MPI_AWARE` - If set to `yes` (*case-sensitive*) during driver installation, the model driver will be built
+with MPI support, where `n` GPU devices are used for `n` ranks on single node (more details below).
+2. `KIM_MODEL_DISBALE_GRAPH` - If this environment variable is defined (irrespective of value), the model driver will be
+built without graph support. This means during build time it will not try to find and link against `libtorchscatter` and
+`libtorchsparse` libraries. 
+3. If the model driver does not detect `libdescriptor` library installed on the system, or no `LIBDESCRIPTOR_ROOT` environment
+variable is defined, the model driver will be built without the descriptor support. This is achieved by not passing
+`-DLIB_DESC` flag at compile time. Other than `LIBDESCRIPTOR_ROOT` environment variable, the build script looks for the 
+`libdescriptor` in `/usr/local/lib` directory.
 
 ### _Note: only applicable to `just-graph-nn` branch_
 _Having multiple GPU per MPI rank is not supported yet and will waste resources by only using 1 GPU of the available pool.
 Better utilization would be to launch `n` MPI ranks per `n` GPU on the same node. For using `n` GPU with `n` ranks on
 same node, you need to build an MPI aware version of TorchMLModelDriver. This can be done by setting environment 
 variable `KIM_MODEL_MPI_AWARE` to `yes` (i.e. `export KIM_MODEL_MPI_AWARE=yes`). This would force CMake to look
-for MPI libraries and fail if it does not find it and pass `-DYESMPI` flag to the underlying compiler, which
+for MPI libraries and fail if it does not find it and pass `-DUSE_MPI` flag to the underlying compiler, which
 would accordingly compile appropriate routine. Then during runtime, model driver will now use `n` devices for `n` ranks 
 if `KIM_MODEL_MPI_AWARE` is set to `yes` at run time else revert to usual behavior if `KIM_MODEL_MPI_AWARE` is set
 to any other value, or undefined at run time._
@@ -122,8 +136,8 @@ _To summarize, if you define an installation time env variable `KIM_MODEL_MPI_AW
 support but then you will i) need MPI at compile time and ii) need to set `KIM_MODEL_MPI_AWARE` variable at run time
 as well for using it (else it will behave as normal driver.)_
 
-TODO: Enable MPI aware build option on main model driver
-
+> Note: `just-graph-nn` branch is kind of redundant, owing to the `conditional-compilation` branch, which will be merged
+> into `master` soon. So, it is recommended to use `conditional-compilation` branch instead of `just-graph-nn` branch. 
 ---
 
 ## Docker Support

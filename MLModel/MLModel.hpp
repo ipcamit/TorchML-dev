@@ -6,8 +6,11 @@
 #include <string>
 
 #include <torch/script.h>
+
+#ifndef DISABLE_GRAPH
 #include <torchscatter/scatter.h>
 #include <torchsparse/sparse.h>
+#endif
 
 // TODO Specify kind of models and enumerate
 // Basic kind I can think of

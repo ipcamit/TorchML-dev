@@ -28,29 +28,50 @@ if (NOT DEFINED TORCH_ROOT)
         set(TORCH_ROOT "/opt/libtorch")
     endif()
 endif()
-if (NOT DEFINED TorchScatter_ROOT)
-    if (DEFINED ENV{TorchScatter_ROOT})
-        set(TorchScatter_ROOT $ENV{TorchScatter_ROOT})
-    else()
-        set(TorchScatter_ROOT "/usr/local")
-    endif()
+
+# If there exist an environment variable named KIM_MODEL_DISABLE_GRAPH then do not look for TorchScatter and TorchSparse
+if (DEFINED ENV{KIM_MODEL_DISABLE_GRAPH})
+    set(KIM_MODEL_DISABLE_GRAPH $ENV{KIM_MODEL_DISABLE_GRAPH})
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DDISABLE_GRAPH")
+else()
+    set(KIM_MODEL_DISABLE_GRAPH "OFF")
 endif()
-if (NOT DEFINED TorchSparse_ROOT)
-    if (DEFINED ENV{TorchSparse_ROOT})
-        set(TorchSparse_ROOT $ENV{TorchSparse_ROOT})
-    else()
-        set(TorchSparse_ROOT "/usr/local")
+
+if (NOT KIM_MODEL_DISABLE_GRAPH)
+    if (NOT DEFINED TorchScatter_ROOT)
+        if (DEFINED ENV{TorchScatter_ROOT})
+            set(TorchScatter_ROOT $ENV{TorchScatter_ROOT})
+        else()
+            set(TorchScatter_ROOT "/usr/local")
+        endif()
+    endif()
+    if (NOT DEFINED TorchSparse_ROOT)
+        if (DEFINED ENV{TorchSparse_ROOT})
+            set(TorchSparse_ROOT $ENV{TorchSparse_ROOT})
+        else()
+            set(TorchSparse_ROOT "/usr/local")
+        endif()
     endif()
 endif()
 
 # print all files -----------------------------------------
 message("KIM PREFIX DIR: ${KIM_ROOT}")
 message("TORCH PREFIX DIR: ${TORCH_ROOT}")
-message("TorchScatter PREFIX DIR: ${TorchScatter_ROOT}")
-message("TorchSparse PREFIX DIR: ${TorchSparse_ROOT}")
+
+if (NOT KIM_MODEL_DISABLE_GRAPH)
+    message("TorchScatter PREFIX DIR: ${TorchScatter_ROOT}")
+    message("TorchSparse PREFIX DIR: ${TorchSparse_ROOT}")
+else()
+    message("TorchScatter and TorchSparse are disabled")
+endif()
 
 # Append to PREFIX PATH -----------------------------------------
-list(APPEND CMAKE_PREFIX_PATH ${KIM_ROOT} ${TORCH_ROOT} ${TorchScatter_ROOT} ${TorchSparse_ROOT})
+if (NOT KIM_MODEL_DISABLE_GRAPH)
+    set(CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH} ${KIM_ROOT} ${TORCH_ROOT} ${TorchScatter_ROOT} ${TorchSparse_ROOT})
+else()
+    set(CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH} ${KIM_ROOT} ${TORCH_ROOT})
+endif()
+#list(APPEND CMAKE_PREFIX_PATH ${KIM_ROOT} ${TORCH_ROOT} ${TorchScatter_ROOT} ${TorchSparse_ROOT})
 find_package(KIM-API-ITEMS 2.2 REQUIRED CONFIG)
 
 # KIM-API setup --------------------------------------------------
@@ -59,10 +80,15 @@ kim_api_items_setup_after_project(ITEM_TYPE "modelDriver")
 
 # Find Torch (env TORCH_ROOT) and Torch Geometric dependencies
 find_package(Torch REQUIRED)
-find_package(TorchScatter CONFIG REQUIRED)
-find_package(TorchSparse CONFIG REQUIRED)
+if (NOT KIM_MODEL_DISABLE_GRAPH)
+    find_package(TorchScatter CONFIG REQUIRED)
+    find_package(TorchSparse CONFIG REQUIRED)
+endif()
 
-include_directories(torch_geometric_dependencies/include)
+# Find Torch Geometric includes
+if (NOT KIM_MODEL_DISABLE_GRAPH)
+    include_directories(torch_geometric_dependencies/include)
+endif()
 
 add_kim_api_model_driver_library(
   NAME                    ${PROJECT_NAME}
@@ -126,8 +152,10 @@ set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_STANDARD 14)
 
 # Link against torch geometric dependencies
 target_link_libraries("${PROJECT_NAME}" PRIVATE MLModel PRIVATE ${TORCH_LIBRARIES})
-target_link_libraries("${PROJECT_NAME}" PRIVATE TorchScatter::TorchScatter)
-target_link_libraries("${PROJECT_NAME}" PRIVATE TorchSparse::TorchSparse)
+if (NOT KIM_MODEL_DISABLE_GRAPH)
+    target_link_libraries("${PROJECT_NAME}" PRIVATE TorchScatter::TorchScatter)
+    target_link_libraries("${PROJECT_NAME}" PRIVATE TorchSparse::TorchSparse)
+endif()
 
 target_include_directories(
         "${PROJECT_NAME}" PRIVATE

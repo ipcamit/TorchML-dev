@@ -46,10 +46,17 @@ TorchMLModelDriverImplementation::TorchMLModelDriverImplementation(
 
     // Set Influence distance ---------------------------------------------------------
     if (preprocessing == "Graph") {
+#ifndef DISABLE_GRAPH
         modelWillNotRequestNeighborsOfNoncontributingParticles_ = static_cast<int>(false);
     } else {
         modelWillNotRequestNeighborsOfNoncontributingParticles_ = static_cast<int>(true);
     }
+#else
+        LOG_ERROR("Graph preprocessing is not supported in this build");
+        *ier = true;
+        return;
+    }
+#endif
     modelDriverCreate->SetInfluenceDistancePointer(&influence_distance);
     modelDriverCreate->SetNeighborListPointers(1, &cutoff_distance,
                                                &modelWillNotRequestNeighborsOfNoncontributingParticles_);
@@ -91,8 +98,14 @@ TorchMLModelDriverImplementation::TorchMLModelDriverImplementation(
 #endif
         graph_edge_indices = nullptr;
     } else if (preprocessing == "Graph") {
+#ifndef DISABLE_GRAPH
         graph_edge_indices = new long *[n_layers];
         for (int i = 0; i < n_layers; i++) graph_edge_indices[i] = nullptr;
+#else
+        LOG_ERROR("Graph preprocessing is not supported in this build");
+        *ier = true;
+        return;
+#endif
         // descriptor = nullptr;
     } else {
         // descriptor = nullptr;
@@ -174,7 +187,9 @@ void TorchMLModelDriverImplementation::preprocessInputs(KIM::ModelComputeArgumen
         setDescriptorInputs(modelComputeArguments);
 #endif
     } else if (preprocessing == "Graph") {
+#ifndef DISABLE_GRAPH
         setGraphInputs(modelComputeArguments);
+#endif
     }
 }
 
@@ -585,9 +600,15 @@ void TorchMLModelDriverImplementation::readParametersFile(KIM::ModelDriverCreate
         cutoff_distance = std::stod(placeholder_string);
         n_layers = 0;
         if (preprocessing == "Graph") {
+#ifndef DISABLE_GRAPH
             std::getline(file_ptr, placeholder_string);
             n_layers = std::stoi(placeholder_string);
             influence_distance = cutoff_distance * n_layers;
+#else
+            LOG_ERROR("Graph preprocessing not supported");
+            *ier = true;
+            return;
+#endif
         } else {
             influence_distance = cutoff_distance;
         }

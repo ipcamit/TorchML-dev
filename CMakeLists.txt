@@ -71,15 +71,30 @@ add_kim_api_model_driver_library(
 )
 
 # Link to libdescriptor (Not needed for just-gnn branch)
-if(NOT DEFINED LIBDESCRIPTOR_ROOT)
-    if (DEFINED ENV{LIBDESCRIPTOR_ROOT})
-        set(LIBDESCRIPTOR_ROOT $ENV{LIBDESCRIPTOR_ROOT})
-    else()
-        set(LIBDESCRIPTOR_ROOT "/usr/local")
-    endif()
+# Check if libdescriptor is installed in LIBDESCRIPTOR_ROOT env variable or /usr/local/lib, if yes,
+# add USE_LIBDESC flag to the compiler.
+if (DEFINED LIBDESCRIPTOR_ROOT)
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_LIBDESC")
+    include_directories("${LIBDESCRIPTOR_ROOT}/include")
+    message("libdescriptor location: ${LIBDESCRIPTOR_ROOT}")
+    set(ENABLE_LIBDESC ON)
+elseif(DEFINED ENV{LIBDESCRIPTOR_ROOT})
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_LIBDESC")
+    set(LIBDESCRIPTOR_ROOT $ENV{LIBDESCRIPTOR_ROOT})
+    include_directories("${LIBDESCRIPTOR_ROOT}/include")
+    set(ENABLE_LIBDESC ON)
+    message("libdescriptor location: ${LIBDESCRIPTOR_ROOT}")
+elseif(EXISTS "/usr/local/lib/libdescriptor.so")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_LIBDESC")
+    set(LIBDESCRIPTOR_ROOT "/usr/local")
+    include_directories("${LIBDESCRIPTOR_ROOT}/include")
+    message("libdescriptor location: ${LIBDESCRIPTOR_ROOT}")
+    set(ENABLE_LIBDESC ON)
+else()
+    message("libdescriptor not found, skipping...")
+    set(ENABLE_LIBDESC OFF)
 endif()
-message("libdescriptor location: ${LIBDESCRIPTOR_ROOT}")
-include_directories("${LIBDESCRIPTOR_ROOT}/include")
+
 SET(CMAKE_SKIP_BUILD_RPATH  FALSE)
 
 # Add ML model directory
@@ -105,8 +120,12 @@ target_include_directories(
 
 # Suppress annoying Variable not used warnings, parameter still warns :(
 add_compile_options(-Wno-unused-variable -Wno-unused-parameter)
-find_library(DESC_LIB descriptor HINTS "${LIBDESCRIPTOR_ROOT}/lib")
-target_link_libraries("${PROJECT_NAME}" PRIVATE ${TORCH_LIBRARIES} ${DESC_LIB})
+# Link against libdescriptor if ENABLE_LIBDESC is ON
+if(ENABLE_LIBDESC)
+    target_link_libraries("${PROJECT_NAME}" PRIVATE "${LIBDESCRIPTOR_ROOT}/lib/libdescriptor.so")
+#    find_library(DESC_LIB descriptor HINTS "${LIBDESCRIPTOR_ROOT}/lib")
+#    target_link_libraries("${PROJECT_NAME}" PRIVATE ${TORCH_LIBRARIES} ${DESC_LIB})
+endif()
 
 # Documentation and stuff ----------------------------------------------------------------
 find_package(Doxygen OPTIONAL_COMPONENTS dot)

@@ -82,14 +82,20 @@ TorchMLModelDriverImplementation::TorchMLModelDriverImplementation(
 
     // Set preprocessor descriptor callbacks --------------------------------------------------
     if (preprocessing == "Descriptor") {
+#ifdef USE_LIBDESC
         descriptor = DescriptorKind::initDescriptor(descriptor_param_file, descriptor_kind);
+#else
+        LOG_ERROR("Descriptor preprocessing is not supported in this build");
+        *ier = true;
+        return;
+#endif
         graph_edge_indices = nullptr;
     } else if (preprocessing == "Graph") {
         graph_edge_indices = new long *[n_layers];
         for (int i = 0; i < n_layers; i++) graph_edge_indices[i] = nullptr;
-        descriptor = nullptr;
+        // descriptor = nullptr;
     } else {
-        descriptor = nullptr;
+        // descriptor = nullptr;
         graph_edge_indices = nullptr;
     }
     descriptor_array = nullptr;
@@ -164,7 +170,9 @@ void TorchMLModelDriverImplementation::preprocessInputs(KIM::ModelComputeArgumen
     if (preprocessing == "None") {
         setDefaultInputs(modelComputeArguments);
     } else if (preprocessing == "Descriptor") {
+#ifdef USE_LIBDESC
         setDescriptorInputs(modelComputeArguments);
+#endif
     } else if (preprocessing == "Graph") {
         setGraphInputs(modelComputeArguments);
     }
@@ -226,6 +234,7 @@ void TorchMLModelDriverImplementation::postprocessOutputs(c10::IValue &out_tenso
         int neigh_from = 0;
         int n_neigh;
         if (preprocessing == "Descriptor") {
+#ifdef USE_LIBDESC
             int width = descriptor->width;
             // allocate memory to access forces, and give the location to force_accessor
             force_accessor = new double [*numberOfParticlesPointer * 3];
@@ -247,8 +256,8 @@ void TorchMLModelDriverImplementation::postprocessOutputs(c10::IValue &out_tenso
                                      input_tensor.toTensor().data_ptr<double>() + (i * width),
                                      input_grad.data_ptr<double>() + (i * width),
                                      descriptor);
-
             }
+#endif
         } else {
             // If Torch has performed gradient, then force accessor is simply input gradient
             force_accessor = input_grad.data_ptr<double>();
@@ -262,9 +271,11 @@ void TorchMLModelDriverImplementation::postprocessOutputs(c10::IValue &out_tenso
     }
 
     // Clean memory if Descriptor allocated it
+#ifdef USE_LIBDESC
     if (preprocessing=="Descriptor"){
         delete [] force_accessor;
     }
+#endif
 }
 
 // -----------------------------------------------------------------------------
@@ -347,6 +358,7 @@ void TorchMLModelDriverImplementation::setDescriptorInputs(const KIM::ModelCompu
         LOG_ERROR("Could not create model compute arguments input @ setDefaultInputs");
         return;
     }
+#ifdef USE_LIBDESC
     int neigh_from, n_neigh;
     neigh_from = 0;
     int width = descriptor->width;
@@ -375,6 +387,9 @@ void TorchMLModelDriverImplementation::setDescriptorInputs(const KIM::ModelCompu
 
     std::vector<int> input_tensor_size({n_contributing_atoms, width});
     mlModel->SetInputNode(0, descriptor_array, input_tensor_size, true);
+#else
+    throw std::runtime_error("Descriptor not compiled in; this should not have executed. Please report this bug.");
+#endif
 }
 
 // -----------------------------------------------------------------------------
@@ -607,6 +622,7 @@ void TorchMLModelDriverImplementation::readParametersFile(KIM::ModelDriverCreate
         number_of_inputs = std::stoi(placeholder_string);
 
         if (preprocessing == "Descriptor") {
+#ifdef USE_LIBDESC
             // blank line
             std::getline(file_ptr, placeholder_string);
             // Ignore comments
@@ -623,6 +639,11 @@ void TorchMLModelDriverImplementation::readParametersFile(KIM::ModelDriverCreate
             } else {
                 throw std::invalid_argument("Descriptor not supported.");
             }
+#else
+            LOG_ERROR("Descriptor preprocessing requires libdescriptor");
+            *ier = true;
+            return;
+#endif
         }
 
     } else {
@@ -819,8 +840,10 @@ TorchMLModelDriverImplementation::~TorchMLModelDriverImplementation() {
     // https://github.com/EnzymeAD/Enzyme/issues/929
     // TODO: URGENT Properly clean the descriptor kind
     // Leaving it like this for now as it looks like the enzyme lib continue to function despite the
-    // issue. Will revisit in fututre
+    // issue. Will revisit in future
+#ifdef USE_LIBDESC
      delete descriptor;
+#endif
 //    if (descriptor) {
 //        switch (descriptor->descriptor_kind) {
 //            case AvailableDescriptor::KindSymmetryFunctions: {

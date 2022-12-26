@@ -7,8 +7,10 @@
 
 #include "KIM_ModelDriverHeaders.hpp"
 #include "MLModel.hpp"
-#include "Descriptors.hpp"
 #include <torch/torch.h>
+
+#ifdef USE_LIBDESC
+#include "Descriptors.hpp"
 
 // TODO TEMP WORKAROUND TILL ENZYME FIXES BUG OR I SHIFT TO CLAD etc
 // SEE DESTRUCTOR FOR MORE DETAILS
@@ -17,6 +19,7 @@
 // --------------------------------------------
 
 using namespace Descriptor;
+#endif
 
 class TorchMLModelDriverImplementation {
 public:
@@ -61,9 +64,10 @@ private:
 
     MLModel *mlModel;
 
+#ifdef USE_LIBDESC
     AvailableDescriptor descriptor_kind;
     DescriptorKind *descriptor;
-
+#endif
     std::vector<int> num_neighbors_;
     std::vector<int> neighbor_list;
     std::vector<int> z_map;

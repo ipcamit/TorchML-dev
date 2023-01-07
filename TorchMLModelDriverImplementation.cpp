@@ -230,11 +230,11 @@ void TorchMLModelDriverImplementation::postprocessOutputs(c10::IValue &out_tenso
     if (returns_forces) {
         const auto output_tensor_list = out_tensor.toTuple()->elements();
         auto energy_sum = output_tensor_list[0].toTensor().to(torch::kCPU);
-        *energy = *(energy_sum.data_ptr<double>());
+        *energy = *(energy_sum.contiguous().data_ptr<double>());
 
         // As Ivalue array contains forces, give its pointer to force_accessor
         auto torch_forces = output_tensor_list[1].toTensor().to(torch::kCPU);
-        force_accessor = torch_forces.data_ptr<double>();
+        force_accessor = torch_forces.contiguous().data_ptr<double>();
     } else {
         // TODO: partial particle energy
         // sum() leaves scalars intact, therefore can be used here
@@ -245,7 +245,7 @@ void TorchMLModelDriverImplementation::postprocessOutputs(c10::IValue &out_tenso
         mlModel->GetInputNode(input_tensor);
         auto input_grad = input_tensor.toTensor().grad().to(torch::kCPU);
         auto energy_sum =out_tensor.toTensor().sum().to(torch::kCPU);
-        *energy = *(energy_sum.data_ptr<double>());
+        *energy = *(energy_sum.contiguous().data_ptr<double>());
         int neigh_from = 0;
         int n_neigh;
         if (preprocessing == "Descriptor") {
@@ -275,7 +275,7 @@ void TorchMLModelDriverImplementation::postprocessOutputs(c10::IValue &out_tenso
 #endif
         } else {
             // If Torch has performed gradient, then force accessor is simply input gradient
-            force_accessor = input_grad.data_ptr<double>();
+            force_accessor = input_grad.contiguous().data_ptr<double>();
         }
     }
     // forces = -grad
@@ -980,4 +980,5 @@ int sym_to_z(std::string &sym) {
     if (sym == "Th") return 90;
     if (sym == "Pa") return 91;
     if (sym == "U") return 92;
+    return -1;
 }

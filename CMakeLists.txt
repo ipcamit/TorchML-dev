@@ -167,8 +167,6 @@ add_compile_options(-Wno-unused-variable -Wno-unused-parameter)
 # Link against libdescriptor if ENABLE_LIBDESC is ON
 if(ENABLE_LIBDESC)
     target_link_libraries("${PROJECT_NAME}" PRIVATE "${LIBDESCRIPTOR_ROOT}/lib/libdescriptor.so")
-#    find_library(DESC_LIB descriptor HINTS "${LIBDESCRIPTOR_ROOT}/lib")
-#    target_link_libraries("${PROJECT_NAME}" PRIVATE ${TORCH_LIBRARIES} ${DESC_LIB})
 endif()
 
 # Link against MPI if needed

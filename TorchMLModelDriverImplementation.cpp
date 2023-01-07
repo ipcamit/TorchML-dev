@@ -101,14 +101,15 @@ TorchMLModelDriverImplementation::TorchMLModelDriverImplementation(
 #ifndef DISABLE_GRAPH
         graph_edge_indices = new long *[n_layers];
         for (int i = 0; i < n_layers; i++) graph_edge_indices[i] = nullptr;
+#ifdef USE_LIBDESC
+        descriptor = nullptr;
+#endif
 #else
         LOG_ERROR("Graph preprocessing is not supported in this build");
         *ier = true;
         return;
 #endif
-        // descriptor = nullptr;
     } else {
-        // descriptor = nullptr;
         graph_edge_indices = nullptr;
     }
     descriptor_array = nullptr;

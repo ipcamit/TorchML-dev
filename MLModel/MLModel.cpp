@@ -85,12 +85,17 @@ void PytorchModel::SetInputNode(int model_input_index, int *input, int size,
 
     // FIXME: Determine device to create tensor on
     torch::TensorOptions tensor_options =
-            torch::TensorOptions().dtype(torch_dtype).requires_grad(requires_grad);
+            torch::TensorOptions().dtype(torch_dtype);
 
-    // Finally, create the input tensor and store it on the relevant MLModel
-    // attr
+    // Finally, create the input tensor and store it on the relevant MLModel attr
     torch::Tensor input_tensor =
             torch::from_blob(input, {size}, tensor_options).to(*device_);
+
+    // Workaround for non-leaf tensor thing, originating from .to(device) movement
+    // https://discuss.pytorch.org/t/allocation-of-tensor-on-cuda-fails/144204/2
+    if (requires_grad){
+        input_tensor.retain_grad();
+    }
 
     model_inputs_[model_input_index] = input_tensor;
 }
@@ -103,12 +108,19 @@ void PytorchModel::SetInputNode(int model_input_index, int64_t *input, int size,
 
     // FIXME: Determine device to create tensor on
     torch::TensorOptions tensor_options =
-            torch::TensorOptions().dtype(torch_dtype).requires_grad(requires_grad);
+            torch::TensorOptions().dtype(torch_dtype);
 
     // Finally, create the input tensor and store it on the relevant MLModel
     // attr
     torch::Tensor input_tensor =
             torch::from_blob(input, {size}, tensor_options).to(*device_);
+
+    // Workaround for non-leaf tensor thing, originating from .to(device) movement
+    // https://discuss.pytorch.org/t/allocation-of-tensor-on-cuda-fails/144204/2
+    if (requires_grad){
+        input_tensor.retain_grad();
+    }
+
     model_inputs_[model_input_index] = input_tensor;
 }
 
@@ -127,6 +139,12 @@ void PytorchModel::SetInputNode(int model_input_index, double *input, int size,
     torch::Tensor input_tensor =
             torch::from_blob(input, {size}, tensor_options).to(*device_);
 
+    // Workaround for non-leaf tensor thing, originating from .to(device) movement
+    // https://discuss.pytorch.org/t/allocation-of-tensor-on-cuda-fails/144204/2
+    if (requires_grad){
+        input_tensor.retain_grad();
+    }
+
     model_inputs_[model_input_index] = input_tensor;
 }
 
@@ -144,6 +162,13 @@ void PytorchModel::SetInputNode(int model_input_index, double *input, std::vecto
     for (auto val: size) size_t.push_back(static_cast<int64_t>(val));
     torch::Tensor input_tensor =
             torch::from_blob(input, size_t, tensor_options).to(*device_);
+
+    // Workaround for non-leaf tensor thing, originating from .to(device) movement
+    // https://discuss.pytorch.org/t/allocation-of-tensor-on-cuda-fails/144204/2
+    if (requires_grad){
+        input_tensor.retain_grad();
+    }
+
     model_inputs_[model_input_index] = input_tensor;
 }
 

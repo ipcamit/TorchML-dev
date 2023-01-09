@@ -231,7 +231,7 @@ void TorchMLModelDriverImplementation::postprocessOutputs(c10::IValue &out_tenso
     if (returns_forces) {
         const auto output_tensor_list = out_tensor.toTuple()->elements();
         auto energy_sum = output_tensor_list[0].toTensor().to(torch::kCPU);
-        *energy = *(energy_sum.contiguous().data_ptr<double>());
+        *energy = *(energy_sum.data_ptr<double>());
 
         // As Ivalue array contains forces, give its pointer to force_accessor
         auto torch_forces = output_tensor_list[1].toTensor().to(torch::kCPU);
@@ -241,16 +241,17 @@ void TorchMLModelDriverImplementation::postprocessOutputs(c10::IValue &out_tenso
         // sum() leaves scalars intact, therefore can be used here
         // but in future scalar and vector tensors will be handled differently
         // to ensure proper handling of partial particle energy parameter from KIM
-        out_tensor.toTensor().sum().backward();
         c10::IValue input_tensor;
         mlModel->GetInputNode(input_tensor);
+        auto energy_sum =out_tensor.toTensor().sum();
+        energy_sum.backward();
+        auto energy_sum_cpu = energy_sum.to(torch::kCPU);
+        *energy = *(energy_sum_cpu.contiguous().data_ptr<double>());
         auto input_grad = input_tensor.toTensor().grad().to(torch::kCPU);
-        auto energy_sum =out_tensor.toTensor().sum().to(torch::kCPU);
-        *energy = *(energy_sum.contiguous().data_ptr<double>());
-        int neigh_from = 0;
-        int n_neigh;
         if (preprocessing == "Descriptor") {
 #ifdef USE_LIBDESC
+            int neigh_from = 0;
+            int n_neigh;
             int width = descriptor->width;
             // allocate memory to access forces, and give the location to force_accessor
             force_accessor = new double [*numberOfParticlesPointer * 3];
@@ -270,7 +271,7 @@ void TorchMLModelDriverImplementation::postprocessOutputs(c10::IValue &out_tenso
                                      coordinates,
                                      force_accessor,
                                      input_tensor.toTensor().data_ptr<double>() + (i * width),
-                                     input_grad.data_ptr<double>() + (i * width),
+                                     input_grad.contiguous().data_ptr<double>() + (i * width),
                                      descriptor);
             }
 #endif

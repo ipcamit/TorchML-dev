@@ -59,10 +59,10 @@ private:
     int modelWillNotRequestNeighborsOfNoncontributingParticles_;
     int n_contributing_atoms;
     int number_of_inputs;
-    int *species_atomic_number;
+    int64_t *species_atomic_number;
     int64_t *contraction_array;
 
-    MLModel *mlModel;
+    MLModel *ml_model;
 
 #ifdef USE_LIBDESC
     AvailableDescriptor descriptor_kind;

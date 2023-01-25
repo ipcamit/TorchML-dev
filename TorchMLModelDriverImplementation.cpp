@@ -9,6 +9,9 @@
 #define MAX_FILE_NUM 3
 //typedef double VecOfSize3[3];
 #define KIM_DEVICE_ENV_VAR "KIM_MODEL_EXECUTION_DEVICE"
+//THIS IS A TEMPORARY WORKAROUND ELEMENT MAPPING>
+// TODO: REMOVE THIS WHEN File-io is fixed
+#define KIM_ELEMENTS_ENV_VAR "KIM_MODEL_ELEMENTS_MAP"
 
 //******************************************************************************
 #undef KIM_LOGGER_OBJECT_NAME
@@ -26,14 +29,14 @@ TorchMLModelDriverImplementation::TorchMLModelDriverImplementation(
     //initialize members to remove warning----
     influence_distance = 0.0;
     n_elements = 0;
-    mlModel = nullptr;
+    ml_model = nullptr;
     returns_forces = false;
     cutoff_distance = 0.0;
     n_layers = 0;
     n_contributing_atoms = 0;
     number_of_inputs = 0;
     // Read parameter files from model driver ---------------------------------------
-    // also initialize the mlModel
+    // also initialize the ml_model
     readParametersFile(modelDriverCreate, ier);
     LOG_DEBUG("Read Param files");
     if (*ier) return;
@@ -174,7 +177,7 @@ void TorchMLModelDriverImplementation::Run(const KIM::ModelComputeArguments *con
     c10::IValue out_tensor;
     contributingAtomCounts(modelComputeArguments);
     preprocessInputs(modelComputeArguments);
-    mlModel->Run(out_tensor);
+    ml_model->Run(out_tensor);
     postprocessOutputs(out_tensor, modelComputeArguments);
 }
 
@@ -242,7 +245,7 @@ void TorchMLModelDriverImplementation::postprocessOutputs(c10::IValue &out_tenso
         // but in future scalar and vector tensors will be handled differently
         // to ensure proper handling of partial particle energy parameter from KIM
         c10::IValue input_tensor;
-        mlModel->GetInputNode(input_tensor);
+        ml_model->GetInputNode(input_tensor);
         auto energy_sum =out_tensor.toTensor().sum();
         energy_sum.backward();
         auto energy_sum_cpu = energy_sum.to(torch::kCPU);
@@ -342,12 +345,12 @@ void TorchMLModelDriverImplementation::setDefaultInputs(const KIM::ModelComputeA
     }
     int const numberOfParticles = *numberOfParticlesPointer;
 
-    mlModel->SetInputNode(0, particleContributing, numberOfParticles);
-    mlModel->SetInputNode(1, coordinates, 3 * numberOfParticles, true);
+    ml_model->SetInputNode(0, particleContributing, numberOfParticles);
+    ml_model->SetInputNode(1, coordinates, 3 * numberOfParticles, true);
 
     updateNeighborList(modelComputeArguments, n_contributing_atoms);
-    mlModel->SetInputNode(2, num_neighbors_.data(), static_cast<int>(num_neighbors_.size()));
-    mlModel->SetInputNode(3, neighbor_list.data(), static_cast<int>(neighbor_list.size()));
+    ml_model->SetInputNode(2, num_neighbors_.data(), static_cast<int>(num_neighbors_.size()));
+    ml_model->SetInputNode(3, neighbor_list.data(), static_cast<int>(neighbor_list.size()));
 }
 
 // -----------------------------------------------------------------------------
@@ -403,7 +406,7 @@ void TorchMLModelDriverImplementation::setDescriptorInputs(const KIM::ModelCompu
     }
 
     std::vector<int> input_tensor_size({n_contributing_atoms, width});
-    mlModel->SetInputNode(0, descriptor_array, input_tensor_size, true);
+    ml_model->SetInputNode(0, descriptor_array, input_tensor_size, true);
 #else
     throw std::runtime_error("Descriptor not compiled in; this should not have executed. Please report this bug.");
 #endif
@@ -478,19 +481,27 @@ void TorchMLModelDriverImplementation::setGraphInputs(const KIM::ModelComputeArg
         species_atomic_number = nullptr;
     }
 
-    species_atomic_number = new int[*numberOfParticlesPointer];
+    //TODO: Read this from file
+    // Get environment variable KIM_MODEL_ELEMENTS_MAP, and set map_species_z to true if it is set, else false
+    bool map_species_z = std::getenv(KIM_ELEMENTS_ENV_VAR) != nullptr;
+
+    species_atomic_number = new int64_t[*numberOfParticlesPointer];
     for (int i = 0; i < *numberOfParticlesPointer; i++) {
-        species_atomic_number[i] = z_map[particleSpeciesCodes[i]];
+        if (map_species_z) {
+            species_atomic_number[i] = z_map[particleSpeciesCodes[i]];
+        } else {
+            species_atomic_number[i] = particleSpeciesCodes[i];
+        }
     }
 
 
-    mlModel->SetInputNode(0, species_atomic_number, *numberOfParticlesPointer, false);
+    ml_model->SetInputNode(0, species_atomic_number, *numberOfParticlesPointer, false);
 
     std::vector<int> input_tensor_size({*numberOfParticlesPointer, 3});
-    mlModel->SetInputNode(1, coordinates, input_tensor_size, true);
+    ml_model->SetInputNode(1, coordinates, input_tensor_size, true);
 
     for (int i = 0; i < n_layers; i++) {
-        mlModel->SetInputNode(2 + i, i, static_cast<int>(unrolled_graph[i].size()), graph_edge_indices);
+        ml_model->SetInputNode(2 + i, i, static_cast<int>(unrolled_graph[i].size()), graph_edge_indices);
     }
 
     if (contraction_array) {
@@ -502,7 +513,7 @@ void TorchMLModelDriverImplementation::setGraphInputs(const KIM::ModelComputeArg
     for (int i = 0; i < *numberOfParticlesPointer; i++) {
         contraction_array[i] = (i < n_contributing_atoms) ? 0 : 1;
     }
-    mlModel->SetInputNode(2 + n_layers, contraction_array, *numberOfParticlesPointer, false);
+    ml_model->SetInputNode(2 + n_layers, contraction_array, *numberOfParticlesPointer, false);
 }
 
 // --------------------------------------------------------------------------------
@@ -683,10 +694,10 @@ void TorchMLModelDriverImplementation::readParametersFile(KIM::ModelDriverCreate
         return;
     }
     // Load Torch Model ----------------------------------------------------------------
-    mlModel = MLModel::create(full_qualified_model_name.c_str(),
-                              ML_MODEL_PYTORCH,
-                              std::getenv(KIM_DEVICE_ENV_VAR),
-                              number_of_inputs);
+    ml_model = MLModel::create(full_qualified_model_name.c_str(),
+                               ML_MODEL_PYTORCH,
+                               std::getenv(KIM_DEVICE_ENV_VAR),
+                               number_of_inputs);
     LOG_INFORMATION("Loaded Torch model and set to eval");
 }
 

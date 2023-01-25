@@ -122,22 +122,14 @@ variable is defined, the model driver will be built without the descriptor suppo
 `-DLIB_DESC` flag at compile time. Other than `LIBDESCRIPTOR_ROOT` environment variable, the build script looks for the 
 `libdescriptor` in `/usr/local/lib` directory.
 
-### _Note: only applicable to `just-graph-nn` branch_
-_Having multiple GPU per MPI rank is not supported yet and will waste resources by only using 1 GPU of the available pool.
-Better utilization would be to launch `n` MPI ranks per `n` GPU on the same node. For using `n` GPU with `n` ranks on
-same node, you need to build an MPI aware version of TorchMLModelDriver. This can be done by setting environment 
-variable `KIM_MODEL_MPI_AWARE` to `yes` (i.e. `export KIM_MODEL_MPI_AWARE=yes`). This would force CMake to look
-for MPI libraries and fail if it does not find it and pass `-DUSE_MPI` flag to the underlying compiler, which
-would accordingly compile appropriate routine. Then during runtime, model driver will now use `n` devices for `n` ranks 
-if `KIM_MODEL_MPI_AWARE` is set to `yes` at run time else revert to usual behavior if `KIM_MODEL_MPI_AWARE` is set
-to any other value, or undefined at run time._
+### Temporary Runtime Flag
+The model driver also supports a temporary runtime environmental variable `KIM_MODEL_ELEMENTS_MAP`, which if set to any 
+value during runtime, will enable mapping of elements to their atomic numbers. If this variable is not set, the model
+driver will assign 0 - n indices to the atomic species. This option might get removed in future when this
+information will be provided with the portable model.
 
-_To summarize, if you define an installation time env variable `KIM_MODEL_MPI_AWARE` you can enable same-node multi-GPU 
-support but then you will i) need MPI at compile time and ii) need to set `KIM_MODEL_MPI_AWARE` variable at run time
-as well for using it (else it will behave as normal driver.)_
-
-> Note: `just-graph-nn` branch is kind of redundant, owing to the `conditional-compilation` branch, which will be merged
-> into `master` soon. So, it is recommended to use `conditional-compilation` branch instead of `just-graph-nn` branch. 
+---
+> Note: `just-graph-nn` branch is deprecated. Now the model driver can compile or omit requisite dependencies. 
 ---
 
 ## Docker Support

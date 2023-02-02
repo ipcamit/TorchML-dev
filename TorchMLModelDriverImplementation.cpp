@@ -5,6 +5,7 @@
 #include <vector>
 #include <algorithm>
 #include <stdexcept>
+#include <torchscatter/scatter.h>
 
 #define MAX_FILE_NUM 3
 //typedef double VecOfSize3[3];
@@ -157,7 +158,13 @@ int TorchMLModelDriverImplementation::ComputeArgumentsCreate(
                     // TODO: Handle it properly in future for GD models
                 || modelComputeArgumentsCreate->SetArgumentSupportStatus(
             KIM::COMPUTE_ARGUMENT_NAME::partialForces,
-            KIM::SUPPORT_STATUS::optional);
+            KIM::SUPPORT_STATUS::optional)
+                || modelComputeArgumentsCreate->SetArgumentSupportStatus(
+                  KIM::COMPUTE_ARGUMENT_NAME::partialParticleEnergy,
+                  KIM::SUPPORT_STATUS::optional);
+                // || modelComputeArgumentsCreate->SetArgumentSupportStatus(
+                //   KIM::COMPUTE_ARGUMENT_NAME::partialVirial,
+                //   KIM::SUPPORT_STATUS::optional);
     // register callbacks
     LOG_INFORMATION("Register callback supportStatus");
     // error = error
@@ -205,10 +212,13 @@ void TorchMLModelDriverImplementation::postprocessOutputs(c10::IValue &out_tenso
                                                           KIM::ModelComputeArguments const *modelComputeArguments) {
 
     double *energy = nullptr;
+    double *particleEnergy = nullptr;
     double *forces = nullptr;
     int const *numberOfParticlesPointer;
     int *particleSpeciesCodes; // FIXME: Implement species code handling
     double *coordinates = nullptr;
+//    double *virial = nullptr;
+
 
     auto ier = modelComputeArguments->GetArgumentPointer(
             KIM::COMPUTE_ARGUMENT_NAME::numberOfParticles,
@@ -224,8 +234,13 @@ void TorchMLModelDriverImplementation::postprocessOutputs(c10::IValue &out_tenso
             (double const **) &forces)
                || modelComputeArguments->GetArgumentPointer(
             KIM::COMPUTE_ARGUMENT_NAME::partialEnergy,
-            &energy);
-
+            &energy)
+                || modelComputeArguments->GetArgumentPointer(
+            KIM::COMPUTE_ARGUMENT_NAME::partialParticleEnergy,
+            &particleEnergy);
+            //       || modelComputeArguments->GetArgumentPointer(
+            //   KIM::COMPUTE_ARGUMENT_NAME::partialVirial,
+            //   &virial);
     if (ier) return;
 
     // Pointer to array storing forces
@@ -246,11 +261,25 @@ void TorchMLModelDriverImplementation::postprocessOutputs(c10::IValue &out_tenso
         // to ensure proper handling of partial particle energy parameter from KIM
         c10::IValue input_tensor;
         ml_model->GetInputNode(input_tensor);
-        auto energy_sum =out_tensor.toTensor().sum();
+        if (particleEnergy) {
+            auto partial_energy = out_tensor.toTensor().to(torch::kCPU);
+            auto partial_energy_accessor = partial_energy.contiguous().data_ptr<double>();
+
+            for (int i = 0; i < *numberOfParticlesPointer; i++) {
+                if (i < n_contributing_atoms){
+                    particleEnergy[i] = partial_energy_accessor[i];
+                } else {
+                    particleEnergy[i] = 0.0;
+                }
+            }
+        }
+
+        auto energy_sum = out_tensor.toTensor().sum();
         energy_sum.backward();
         auto energy_sum_cpu = energy_sum.to(torch::kCPU);
         *energy = *(energy_sum_cpu.contiguous().data_ptr<double>());
         auto input_grad = input_tensor.toTensor().grad().to(torch::kCPU);
+
         if (preprocessing == "Descriptor") {
 #ifdef USE_LIBDESC
             int neigh_from = 0;

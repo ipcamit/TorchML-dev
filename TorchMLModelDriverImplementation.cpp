@@ -245,11 +245,16 @@ void TorchMLModelDriverImplementation::postprocessOutputs(c10::IValue &out_tenso
 
     // Pointer to array storing forces
     double *force_accessor = nullptr;
+    double *partial_energy_accessor = nullptr;
 
     if (returns_forces) {
         const auto output_tensor_list = out_tensor.toTuple()->elements();
-        auto energy_sum = output_tensor_list[0].toTensor().to(torch::kCPU);
+        auto energy_sum = output_tensor_list[0].toTensor().sum();
+        auto partial_energy = output_tensor_list[0].toTensor().to(torch::kCPU);
+
         *energy = *(energy_sum.data_ptr<double>());
+
+        partial_energy_accessor = partial_energy.contiguous().data_ptr<double>();
 
         // As Ivalue array contains forces, give its pointer to force_accessor
         auto torch_forces = output_tensor_list[1].toTensor().to(torch::kCPU);
@@ -261,22 +266,13 @@ void TorchMLModelDriverImplementation::postprocessOutputs(c10::IValue &out_tenso
         // to ensure proper handling of partial particle energy parameter from KIM
         c10::IValue input_tensor;
         ml_model->GetInputNode(input_tensor);
-        if (particleEnergy) {
-            auto partial_energy = out_tensor.toTensor().to(torch::kCPU);
-            auto partial_energy_accessor = partial_energy.contiguous().data_ptr<double>();
-
-            for (int i = 0; i < *numberOfParticlesPointer; i++) {
-                if (i < n_contributing_atoms){
-                    particleEnergy[i] = partial_energy_accessor[i];
-                } else {
-                    particleEnergy[i] = 0.0;
-                }
-            }
-        }
-
         auto energy_sum = out_tensor.toTensor().sum();
         energy_sum.backward();
         auto energy_sum_cpu = energy_sum.to(torch::kCPU);
+
+        auto partial_energy = out_tensor.toTensor().to(torch::kCPU);
+        partial_energy_accessor = partial_energy.contiguous().data_ptr<double>();
+
         *energy = *(energy_sum_cpu.contiguous().data_ptr<double>());
         auto input_grad = input_tensor.toTensor().grad().to(torch::kCPU);
 
@@ -317,6 +313,18 @@ void TorchMLModelDriverImplementation::postprocessOutputs(c10::IValue &out_tenso
         *(forces + 3 * i + 0) = -*(force_accessor + 3 * i + 0);
         *(forces + 3 * i + 1) = -*(force_accessor + 3 * i + 1);
         *(forces + 3 * i + 2) = -*(force_accessor + 3 * i + 2);
+    }
+
+    // partial particle energy
+
+    if (particleEnergy) {
+        for (int i = 0; i < *numberOfParticlesPointer; i++) {
+            if (i < n_contributing_atoms){
+                particleEnergy[i] = partial_energy_accessor[i];
+            } else {
+                particleEnergy[i] = 0.0;
+            }
+        }
     }
 
     // Clean memory if Descriptor allocated it

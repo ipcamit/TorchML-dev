@@ -252,7 +252,7 @@ void TorchMLModelDriverImplementation::postprocessOutputs(c10::IValue &out_tenso
         auto energy_sum = output_tensor_list[0].toTensor().sum();
         auto partial_energy = output_tensor_list[0].toTensor().to(torch::kCPU);
 
-        *energy = *(energy_sum.data_ptr<double>());
+        *energy = *(energy_sum.to(torch::kCPU).data_ptr<double>());
 
         partial_energy_accessor = partial_energy.contiguous().data_ptr<double>();
 

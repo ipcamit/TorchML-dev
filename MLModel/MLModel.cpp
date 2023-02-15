@@ -223,6 +223,11 @@ PytorchModel::PytorchModel(const char *model_file_path, const char *device_name,
     // Set model to evaluation mode to set any dropout or batch normalization
     // layers to evaluation mode
     module_.eval();
+    module_ = torch::jit::freeze(module_);
+
+    torch::jit::FusionStrategy strategy;
+    strategy = {{torch::jit::FusionBehavior::DYNAMIC, 3}};
+    torch::jit::setFusionStrategy(strategy);
 }
 
 void PytorchModel::GetInputNode(c10::IValue &out_tensor) {

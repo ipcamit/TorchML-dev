@@ -476,42 +476,64 @@ void TorchMLModelDriverImplementation::setGraphInputs(const KIM::ModelComputeArg
     }
     int numberOfNeighbors;
     int const *neighbors;
-    std::tuple<int, int> bond_pair, rev_bond_pair;
-    std::vector<std::set<std::tuple<long, long> > > unrolled_graph(n_layers);
-    std::vector<int> next_list, prev_list;
+
+    std::unordered_set<int> atoms_in_layers;
+    std::vector<std::unordered_set<std::array<long,2>, SymmetricCantorPairing>> unrolled_graph(n_layers);
+
+    for (int i = 0; i < n_contributing_atoms; i++){
+        atoms_in_layers.insert(i);
+    }
 
     double cutoff_sq = cutoff_distance * cutoff_distance;
-
-    for (int atom_i = 0; atom_i < n_contributing_atoms; atom_i++) {
-        prev_list.push_back(atom_i);
-        for (int i = 0; i < n_layers; i++) {
-            if (!prev_list.empty()) {
-                do {
-                    int curr_atom = prev_list.back();
-                    prev_list.pop_back();
-                    modelComputeArguments->GetNeighborList(0,
-                                                           curr_atom,
-                                                           &numberOfNeighbors,
-                                                           &neighbors);
-                    for (int j = 0; j < numberOfNeighbors; j++) {
-                        if ((std::pow((*(coordinates + 3 * curr_atom + 0) - *(coordinates + 3 * neighbors[j] + 0)), 2) +
-                             std::pow((*(coordinates + 3 * curr_atom + 1) - *(coordinates + 3 * neighbors[j] + 1)), 2) +
-                             std::pow((*(coordinates + 3 * curr_atom + 2) - *(coordinates + 3 * neighbors[j] + 2)), 2))
-                            <= cutoff_sq) {
-                            bond_pair = std::make_tuple(curr_atom, neighbors[j]);
-                            rev_bond_pair = std::make_tuple(neighbors[j], curr_atom);
-                            unrolled_graph[i].insert(bond_pair);
-                            unrolled_graph[i].insert(rev_bond_pair);
-                            next_list.push_back((neighbors[j]));
-                        }
-                    }
-                } while (!prev_list.empty());
-                prev_list.swap(next_list);
+    double _x, _y, _z;
+    std::array<double, 3> i_arr = {0.0, 0.0, 0.0}, j_arr = {0.0, 0.0, 0.0};
+    int ii = 0;
+    do {
+        std::unordered_set<int> atoms_in_next_layer;
+        for (int atom_i : atoms_in_layers) {
+            modelComputeArguments->GetNeighborList(0, atom_i, &numberOfNeighbors, &neighbors);
+            for (int j = 0; j < numberOfNeighbors; j++) {
+                int atom_j = neighbors[j];
+                std::memcpy(i_arr.data(), coordinates + 3 * atom_i, 3 * sizeof(double));
+                std::memcpy(j_arr.data(), coordinates + 3 * atom_j, 3 * sizeof(double));
+                _x = i_arr[0] - j_arr[0];
+                _y = i_arr[1] - j_arr[1];
+                _z = i_arr[2] - j_arr[2];
+                double r_sq = _x * _x + _y * _y + _z * _z;
+                if (r_sq <= cutoff_sq) {
+                    unrolled_graph[ii].insert({atom_i, atom_j});
+                    atoms_in_next_layer.insert(atom_j);
+                }
             }
         }
-        prev_list.clear();
+        atoms_in_layers = atoms_in_next_layer;
+        ii++;
+    } while (ii < n_layers);
+
+    // Sanitize previous graph
+    if (graph_edge_indices) {
+        for (int i = 0; i < n_layers; i++) {
+            delete[] graph_edge_indices[i];
+        }
+        delete[] graph_edge_indices;
     }
-    graphSetToGraphArray(unrolled_graph);
+
+    graph_edge_indices = new long *[n_layers];
+    ii = 0;
+    for (auto const &edge_index_set: unrolled_graph) {
+        int jj = 0;
+        int single_graph_size = static_cast<int>(edge_index_set.size());
+        // Sanitize previous graph
+        graph_edge_indices[ii] = new long[single_graph_size * 4];
+        for (auto bond_pair: edge_index_set) {
+            graph_edge_indices[ii][jj] = std::get<0>(bond_pair);
+            graph_edge_indices[ii][jj + 2 * single_graph_size] = std::get<1>(bond_pair);
+            jj++;
+        }
+        std::memcpy(graph_edge_indices[ii] + single_graph_size, graph_edge_indices[ii] + 2 * single_graph_size,single_graph_size * sizeof(long));
+        std::memcpy(graph_edge_indices[ii] + 3 * single_graph_size, graph_edge_indices[ii], single_graph_size * sizeof(long));
+        ii++;
+    }
 
     if (species_atomic_number) {
         delete[] species_atomic_number;

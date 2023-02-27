@@ -111,4 +111,19 @@ private:
 
 int sym_to_z(std::string &);
 
+// For hashing unordered_set of pairs
+// https://arxiv.org/pdf/2105.10752.pdf
+class SymmetricCantorPairing {
+public:
+
+  int64_t operator()(const std::array<long,2> &t) const {
+    int64_t k1 = t[0];
+    int64_t k2 = t[1];
+    int64_t kmin = std::min(k1, k2);
+    int64_t ksum = k1 + k2 + 1;
+
+    return ((ksum * ksum - ksum%2) + kmin)/4;
+  }
+};
+
 #endif //TORCH_ML_MODEL_DRIVER_IMPLEMENTATION_HPP

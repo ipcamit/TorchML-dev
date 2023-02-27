@@ -249,15 +249,15 @@ void TorchMLModelDriverImplementation::postprocessOutputs(c10::IValue &out_tenso
 
     if (returns_forces) {
         const auto output_tensor_list = out_tensor.toTuple()->elements();
-        auto energy_sum = output_tensor_list[0].toTensor().sum();
+        auto energy_sum = output_tensor_list[0].toTensor().sum().to(torch::kCPU);
         auto partial_energy = output_tensor_list[0].toTensor().to(torch::kCPU);
+        auto torch_forces = output_tensor_list[1].toTensor().to(torch::kCPU);
 
-        *energy = *(energy_sum.to(torch::kCPU).data_ptr<double>());
+        *energy = *(energy_sum.data_ptr<double>());
 
         partial_energy_accessor = partial_energy.contiguous().data_ptr<double>();
 
         // As Ivalue array contains forces, give its pointer to force_accessor
-        auto torch_forces = output_tensor_list[1].toTensor().to(torch::kCPU);
         force_accessor = torch_forces.contiguous().data_ptr<double>();
     } else {
         // TODO: partial particle energy

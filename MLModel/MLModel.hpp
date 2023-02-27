@@ -5,7 +5,9 @@
 #include <vector>
 #include <string>
 
+#include <torch/torch.h>
 #include <torch/script.h>
+#include <torch/csrc/jit/runtime/graph_executor.h>
 
 #ifndef DISABLE_GRAPH
 #include <torchscatter/scatter.h>

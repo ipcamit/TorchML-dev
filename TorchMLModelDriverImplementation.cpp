@@ -246,6 +246,7 @@ void TorchMLModelDriverImplementation::postprocessOutputs(c10::IValue &out_tenso
     // Pointer to array storing forces
     double *force_accessor = nullptr;
     double *partial_energy_accessor = nullptr;
+    bool expects_partial_energy = false;
 
     if (returns_forces) {
         const auto output_tensor_list = out_tensor.toTuple()->elements();
@@ -255,7 +256,11 @@ void TorchMLModelDriverImplementation::postprocessOutputs(c10::IValue &out_tenso
 
         *energy = *(energy_sum.data_ptr<double>());
 
-        partial_energy_accessor = partial_energy.contiguous().data_ptr<double>();
+        expects_partial_energy = partial_energy.sizes().size() > 0;
+
+        if (expects_partial_energy) {
+            partial_energy_accessor = partial_energy.contiguous().data_ptr<double>();
+        }
 
         // As Ivalue array contains forces, give its pointer to force_accessor
         force_accessor = torch_forces.contiguous().data_ptr<double>();
@@ -271,7 +276,11 @@ void TorchMLModelDriverImplementation::postprocessOutputs(c10::IValue &out_tenso
         auto energy_sum_cpu = energy_sum.to(torch::kCPU);
 
         auto partial_energy = out_tensor.toTensor().to(torch::kCPU);
-        partial_energy_accessor = partial_energy.contiguous().data_ptr<double>();
+
+        expects_partial_energy = partial_energy.sizes().size() > 0;
+        if (expects_partial_energy) {
+            partial_energy_accessor = partial_energy.contiguous().data_ptr<double>();
+        }
 
         *energy = *(energy_sum_cpu.contiguous().data_ptr<double>());
         auto input_grad = input_tensor.toTensor().grad().to(torch::kCPU);
@@ -316,8 +325,7 @@ void TorchMLModelDriverImplementation::postprocessOutputs(c10::IValue &out_tenso
     }
 
     // partial particle energy
-
-    if (particleEnergy) {
+    if (expects_partial_energy) {
         for (int i = 0; i < *numberOfParticlesPointer; i++) {
             if (i < n_contributing_atoms){
                 particleEnergy[i] = partial_energy_accessor[i];
@@ -380,14 +388,54 @@ void TorchMLModelDriverImplementation::setDefaultInputs(const KIM::ModelComputeA
         LOG_ERROR("Could not create model compute arguments input @ setDefaultInputs");
         return;
     }
-    int const numberOfParticles = *numberOfParticlesPointer;
 
-    ml_model->SetInputNode(0, particleContributing, numberOfParticles);
-    ml_model->SetInputNode(1, coordinates, 3 * numberOfParticles, true);
+    if (species_atomic_number) {
+        delete[] species_atomic_number;
+        species_atomic_number = nullptr;
+    }
+
+    bool map_species_z = std::getenv(KIM_ELEMENTS_ENV_VAR) != nullptr;
+    // print true or false in cout
+
+    species_atomic_number = new int64_t[*numberOfParticlesPointer];
+    for (int i = 0; i < *numberOfParticlesPointer; i++) {
+        if (map_species_z) {
+            species_atomic_number[i] = z_map[particleSpeciesCodes[i]];
+        } else {
+            species_atomic_number[i] = particleSpeciesCodes[i];
+        }
+    }
+
+
+    int n_particles = *numberOfParticlesPointer;
+
+    ml_model->SetInputNode(0, species_atomic_number, static_cast<int>(n_particles));
+
+
+    std::vector<int> input_tensor_size({*numberOfParticlesPointer, 3});
+
+
+    ml_model->SetInputNode(1, coordinates, input_tensor_size, true);
+
 
     updateNeighborList(modelComputeArguments, n_contributing_atoms);
+
     ml_model->SetInputNode(2, num_neighbors_.data(), static_cast<int>(num_neighbors_.size()));
     ml_model->SetInputNode(3, neighbor_list.data(), static_cast<int>(neighbor_list.size()));
+
+
+    if (contraction_array) {
+        delete[] contraction_array;
+        contraction_array = nullptr;
+    }
+
+
+    contraction_array = new int64_t[*numberOfParticlesPointer];
+    for (int i = 0; i < *numberOfParticlesPointer; i++) {
+        contraction_array[i] = (i < n_contributing_atoms) ? 1 : 0;
+    }
+    ml_model->SetInputNode(4, contraction_array, *numberOfParticlesPointer, false);
+
 }
 
 // -----------------------------------------------------------------------------
@@ -694,6 +742,7 @@ void TorchMLModelDriverImplementation::readParametersFile(KIM::ModelDriverCreate
         // Model name for comparison
         model_name = placeholder_string;
 
+
         // blank line
         std::getline(file_ptr, placeholder_string);
         // Ignore comments
@@ -703,7 +752,7 @@ void TorchMLModelDriverImplementation::readParametersFile(KIM::ModelDriverCreate
         // Does the model return forces? If no then we need to compute gradients
         // If yes we can optimize it further using inference mode
         for (char &t: placeholder_string) t = static_cast<char>(tolower(t));
-        returns_forces = placeholder_string == "true";
+        returns_forces = placeholder_string == "true" || placeholder_string == "True";
 
         // blank line
         std::getline(file_ptr, placeholder_string);
@@ -749,7 +798,7 @@ void TorchMLModelDriverImplementation::readParametersFile(KIM::ModelDriverCreate
     LOG_DEBUG("Successfully parsed parameter file");
     if (*model_file_name != model_name) {
         LOG_ERROR("Provided model file name different from present model file.");
-        *ier = false;
+        *ier = true;
         return;
     }
     // Load Torch Model ----------------------------------------------------------------

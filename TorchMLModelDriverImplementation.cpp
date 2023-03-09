@@ -5,8 +5,9 @@
 #include <vector>
 #include <algorithm>
 #include <stdexcept>
+#ifndef DISABLE_GRAPH
 #include <torchscatter/scatter.h>
-
+#endif
 #define MAX_FILE_NUM 3
 //typedef double VecOfSize3[3];
 #define KIM_DEVICE_ENV_VAR "KIM_MODEL_EXECUTION_DEVICE"

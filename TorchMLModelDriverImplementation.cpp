@@ -211,9 +211,8 @@ void TorchMLModelDriverImplementation::preprocessInputs(KIM::ModelComputeArgumen
 
 void TorchMLModelDriverImplementation::postprocessOutputs(c10::IValue &out_tensor,
                                                           KIM::ModelComputeArguments const *modelComputeArguments) {
-
     double *energy = nullptr;
-    double *particleEnergy = nullptr;
+    double *partialEnergy = nullptr;
     double *forces = nullptr;
     int const *numberOfParticlesPointer;
     int *particleSpeciesCodes; // FIXME: Implement species code handling
@@ -238,7 +237,7 @@ void TorchMLModelDriverImplementation::postprocessOutputs(c10::IValue &out_tenso
             &energy)
                 || modelComputeArguments->GetArgumentPointer(
             KIM::COMPUTE_ARGUMENT_NAME::partialParticleEnergy,
-            &particleEnergy);
+            &partialEnergy);
             //       || modelComputeArguments->GetArgumentPointer(
             //   KIM::COMPUTE_ARGUMENT_NAME::partialVirial,
             //   &virial);
@@ -248,7 +247,6 @@ void TorchMLModelDriverImplementation::postprocessOutputs(c10::IValue &out_tenso
     double *force_accessor = nullptr;
     double *partial_energy_accessor = nullptr;
     bool expects_partial_energy = false;
-
     if (returns_forces) {
         const auto output_tensor_list = out_tensor.toTuple()->elements();
         auto energy_sum = output_tensor_list[0].toTensor().sum().to(torch::kCPU);
@@ -259,10 +257,10 @@ void TorchMLModelDriverImplementation::postprocessOutputs(c10::IValue &out_tenso
 
         expects_partial_energy = partial_energy.sizes().size() > 0;
 
+
         if (expects_partial_energy) {
             partial_energy_accessor = partial_energy.contiguous().data_ptr<double>();
         }
-
         // As Ivalue array contains forces, give its pointer to force_accessor
         force_accessor = torch_forces.contiguous().data_ptr<double>();
     } else {
@@ -277,15 +275,12 @@ void TorchMLModelDriverImplementation::postprocessOutputs(c10::IValue &out_tenso
         auto energy_sum_cpu = energy_sum.to(torch::kCPU);
 
         auto partial_energy = out_tensor.toTensor().to(torch::kCPU);
-
         expects_partial_energy = partial_energy.sizes().size() > 0;
         if (expects_partial_energy) {
             partial_energy_accessor = partial_energy.contiguous().data_ptr<double>();
         }
-
         *energy = *(energy_sum_cpu.contiguous().data_ptr<double>());
         auto input_grad = input_tensor.toTensor().grad().to(torch::kCPU);
-
         if (preprocessing == "Descriptor") {
 #ifdef USE_LIBDESC
             int neigh_from = 0;
@@ -326,16 +321,15 @@ void TorchMLModelDriverImplementation::postprocessOutputs(c10::IValue &out_tenso
     }
 
     // partial particle energy
-    if (expects_partial_energy) {
+    if (expects_partial_energy && partialEnergy) {
         for (int i = 0; i < *numberOfParticlesPointer; i++) {
             if (i < n_contributing_atoms){
-                particleEnergy[i] = partial_energy_accessor[i];
+                partialEnergy[i] = partial_energy_accessor[i];
             } else {
-                particleEnergy[i] = 0.0;
+                partialEnergy[i] = 0.0;
             }
         }
     }
-
     // Clean memory if Descriptor allocated it
 #ifdef USE_LIBDESC
     if (preprocessing=="Descriptor"){

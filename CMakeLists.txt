@@ -5,7 +5,7 @@ cmake_minimum_required(VERSION 3.10)
 # TODO check strict c++11 compliance
 
 project(TorchMLMD__MD_000000000000_000 LANGUAGES CXX)
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 17)
 cmake_policy(SET CMP0074 NEW)
 STRING(COMPARE EQUAL "${CMAKE_BUILD_TYPE}" "" flg)
 if(flg)
@@ -149,8 +149,8 @@ target_sources(${PROJECT_NAME} PRIVATE
         TorchMLModelDriverImplementation.cpp
 )
 
-# Explicitly set CXX version 14, for some reason above setting does not cut it
-set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_STANDARD 14)
+# Explicitly set CXX version 17 (for autodiff), for some reason above setting does not cut it
+set_property(TARGET ${PROJECT_NAME} PROPERTY CXX_STANDARD 17)
 
 # Link against torch geometric dependencies
 target_link_libraries("${PROJECT_NAME}" PRIVATE MLModel PRIVATE ${TORCH_LIBRARIES})

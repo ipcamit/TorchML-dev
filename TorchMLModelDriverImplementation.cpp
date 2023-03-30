@@ -297,7 +297,7 @@ void TorchMLModelDriverImplementation::postprocessOutputs(c10::IValue &out_tenso
                 // Single atom gradient from descriptor
                 // TODO: call gradient function, which handles atom-wise iteration
                 gradient_single_atom(i,
-                                     n_contributing_atoms,
+                                     *numberOfParticlesPointer,
                                      particleSpeciesCodes,
                                      n_list.data(),
                                      n_neigh,
@@ -476,7 +476,7 @@ void TorchMLModelDriverImplementation::setDescriptorInputs(const KIM::ModelCompu
         // Single atom descriptor wrapper from descriptor
         // TODO: call compute function, which handles atom-wise iteration
         compute_single_atom(i,
-                            n_contributing_atoms,
+                            *numberOfParticlesPointer,
                             particleSpeciesCodes,
                             n_list.data(),
                             n_neigh,

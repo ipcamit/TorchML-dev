@@ -4,7 +4,7 @@ cmake_minimum_required(VERSION 3.10)
 # But ++14 works fine too, so using that for now
 # TODO check strict c++11 compliance
 
-project(TorchMLModelDriver LANGUAGES CXX)
+project(TorchMLMD__MD_000000000000_000 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 14)
 cmake_policy(SET CMP0074 NEW)
 STRING(COMPARE EQUAL "${CMAKE_BUILD_TYPE}" "" flg)

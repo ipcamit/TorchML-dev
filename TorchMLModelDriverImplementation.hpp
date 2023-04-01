@@ -43,15 +43,16 @@ public:
 
     ~TorchMLModelDriverImplementation();
 
-    static int Refresh(KIM::ModelRefresh *modelRefresh);
+    int Refresh(KIM::ModelRefresh *modelRefresh);
+    int Refresh(KIM::ModelDriverCreate *modelRefresh);
 
     int Compute(
             KIM::ModelComputeArguments const *modelComputeArguments);
 
-    static int ComputeArgumentsCreate(
+    int ComputeArgumentsCreate(
             KIM::ModelComputeArgumentsCreate *modelComputeArgumentsCreate);
 
-    static int ComputeArgumentsDestroy(
+    int ComputeArgumentsDestroy(
             KIM::ModelComputeArgumentsDestroy *modelComputeArgumentsDestroy);
 
 private:

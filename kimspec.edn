@@ -1,0 +1,10 @@
+{"contributor-id" "729049db-685a-43b1-97a8-617daa2586ba"
+ "creator" "Amit Gupta"
+ "description" "Model driver for enabling inference with TorchScript based MLIPs, in KIM_API."
+ "domain" "openkim.org"
+ "executables" ["install_dependencies.sh"]
+ "extended-id" "TorchMLMD__MD_879327208594_000"
+ "kim-api-version" "2.0"
+ "maintainer-id" "729049db-685a-43b1-97a8-617daa2586ba"
+ "publication-year" "2023"
+ "title" "Torch ML model driver v000"}

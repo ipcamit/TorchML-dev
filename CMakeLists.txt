@@ -77,7 +77,7 @@ find_package(KIM-API-ITEMS 2.2 REQUIRED CONFIG)
 
 # KIM-API setup --------------------------------------------------
 kim_api_items_setup_before_project(ITEM_TYPE "modelDriver")
-project(TorchMLMD__MD_000000000000_000 LANGUAGES CXX)
+project(TorchMLMD__MD_208472926986_000 LANGUAGES CXX)
 kim_api_items_setup_after_project(ITEM_TYPE "modelDriver")
 
 # Find Torch (env TORCH_ROOT) and Torch Geometric dependencies
@@ -180,21 +180,21 @@ if (DEFINED ENV{KIM_MODEL_MPI_AWARE})
 endif()
 
 # Documentation and stuff ----------------------------------------------------------------
-find_package(Doxygen OPTIONAL_COMPONENTS dot)
-if (DOXYGEN_FOUND)
-    # set input and output files
-    set(DOXYGEN_IN ${CMAKE_CURRENT_SOURCE_DIR}/docs/Doxyfile.in)
-    set(DOXYGEN_OUT ${CMAKE_CURRENT_BINARY_DIR}/docs/Doxyfile.out)
-
-    # request to configure the file
-    configure_file(${DOXYGEN_IN} ${DOXYGEN_OUT} @ONLY)
-    message("Doxygen build started")
-
-    # Note: do not put "ALL" - this builds docs together with application EVERY TIME!
-    add_custom_target(docs COMMAND ${DOXYGEN_EXECUTABLE} ${DOXYGEN_OUT}
-        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR} COMMENT "Generating API documentation with Doxygen"
-        VERBATIM )
-else (DOXYGEN_FOUND)
-  message("Doxygen need to be installed to generate the doxygen documentation")
-endif (DOXYGEN_FOUND)
-
+#find_package(Doxygen OPTIONAL_COMPONENTS dot)
+#if (DOXYGEN_FOUND)
+#    # set input and output files
+#    set(DOXYGEN_IN ${CMAKE_CURRENT_SOURCE_DIR}/docs/Doxyfile.in)
+#    set(DOXYGEN_OUT ${CMAKE_CURRENT_BINARY_DIR}/docs/Doxyfile.out)
+#
+#    # request to configure the file
+#    configure_file(${DOXYGEN_IN} ${DOXYGEN_OUT} @ONLY)
+#    message("Doxygen build started")
+#
+#    # Note: do not put "ALL" - this builds docs together with application EVERY TIME!
+#    add_custom_target(docs COMMAND ${DOXYGEN_EXECUTABLE} ${DOXYGEN_OUT}
+#        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR} COMMENT "Generating API documentation with Doxygen"
+#        VERBATIM )
+#else (DOXYGEN_FOUND)
+#  message("Doxygen need to be installed to generate the doxygen documentation")
+#endif (DOXYGEN_FOUND)
+#

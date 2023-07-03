@@ -19,7 +19,7 @@ echo "5. TorchSparse_ROOT, for pytorch_sparse"
 echo "Do you want to continue? (y/n Type y for yes, n for no)"
 
 read -r response
-if [[ "$response" =~ ^([yY][eE][sS])+$ ]]
+if [[ "$response" =~ [yY] ]]
 then
     echo "Continuing with installation, will not ask for confirmation again"
 else
@@ -34,7 +34,6 @@ if ! command -v nvcc &> /dev/null
 then
     echo "Info: cuda not found, installing cpu version of dependencies"
     is_cuda_available=0
-    exit
 else
     echo "Info: cuda found, installing gpu version of dependencies"
     # is cudnn available, check for CUDNN_ROOT
@@ -79,11 +78,17 @@ then
     cd kim-api
     mkdir build && cd build && cmake .. && make
     make DESTDIR="${current_dir}"/kim-api/install install
+    cd ${current_dir}
     # Add KIM-API to path
     echo "# KIM-API " >> env.sh
-    echo "export PATH=\"\${PATH}:${current_dir}/kim-api/install/usr/local/bin\"" >> env.sh
-    echo "export LD_LIBRARY_PATH=\"\${LD_LIBRARY_PATH}:${current_dir}/kim-api/install/usr/local/lib\"" >> env.sh
-    echo "export INCLUDE=\"\${INCLUDE}:${current_dir}/kim-api/install/usr/local/include\"" >> env.sh
+    KIM_PATH="${current_dir}"/kim-api/install/usr/local/bin
+    KIM_LIB="${current_dir}"/kim-api/install/usr/local/lib
+    KIM_INCLUDE="${current_dir}"/kim-api/install/usr/local/include
+
+    echo "export PATH=$KIM_PATH:\$PATH"
+    echo "export PATH=$KIM_PATH:\$PATH" >> env.sh
+    echo "export LD_LIBRARY_PATH=$KIM_LIB:\$LD_LIBRARY_PATH" >> env.sh
+    echo "export INCLUDE=$KIM_INCLUDE:\$INCLUDE" >> env.sh
 else
     echo "---------------------------------------------------------------------"
     echo -e "kim-api-collections-management found"
@@ -99,18 +104,22 @@ if [[ -z "${TORCH_ROOT}" ]]; then
     # Install libtorch
     if [[ $is_cuda_available -eq 1 ]]; then
         wget https://download.pytorch.org/libtorch/cu117/libtorch-cxx11-abi-shared-with-deps-1.13.0%2Bcu117.zip
-        tar -xvf libtorch-cxx11-abi-shared-with-deps-1.13.0+cu117.zip
-        rm libtorch-cxx11-abi-shared-with-deps-1.9.0+cu111.zip
+        unzip libtorch-cxx11-abi-shared-with-deps-1.13.0+cu117.zip
+        # rm libtorch-cxx11-abi-shared-with-deps-1.9.0+cu111.zip
     else
         wget https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-1.13.0%2Bcpu.zip
         unzip libtorch-cxx11-abi-shared-with-deps-1.9.0+cpu.zip
-        rm libtorch-cxx11-abi-shared-with-deps-1.9.0+cpu.zip
+        # rm libtorch-cxx11-abi-shared-with-deps-1.9.0+cpu.zip
     fi
     # Add libtorch to path
+    TORCH_ROOT="${current_dir}"/libtorch
+    TORCH_LIB="${current_dir}"/libtorch/lib
+    TORCH_INCLUDE="${current_dir}"/libtorch/include
+
     echo "# libtorch " >> env.sh
-    echo "export TORCH_ROOT=\"${current_dir}/libtorch\"" >> env.sh
-    echo "export LD_LIBRARY_PATH=\"\${LD_LIBRARY_PATH}:${current_dir}/libtorch/lib\"" >> env.sh
-    echo "export INCLUDE=\"\${INCLUDE}:${current_dir}/libtorch/include\"" >> env.sh
+    echo "export TORCH_ROOT=$TORCH_ROOT" >> env.sh
+    echo "export LD_LIBRARY_PATH=$TORCH_LIB:\$LD_LIBRARY_PATH" >> env.sh
+    echo "export INCLUDE=$TORCH_INCLUDE:\$INCLUDE" >> env.sh
 else
     echo "---------------------------------------------------------------------"
     echo -e "TORCH_ROOT env variable found"
@@ -126,7 +135,7 @@ if [[ -z "${TorchScatter_ROOT}" ]]; then
     echo "Installing TorchScatter"
     # Install TorchScatter
     git clone --recurse-submodules https://github.com/rusty1s/pytorch_scatter
-    mkdir install build_scatter
+    mkdir build_scatter
     cd build_scatter
     if [[ $is_cuda_available -eq 1 ]]; then
         cmake -DCMAKE_PREFIX_PATH="${TORCH_ROOT}" -DCMAKE_INSTALL_PREFIX="" -DCUDNN_INCLUDE_PATH="${CUDNN_ROOT}/include" -DCUDNN_LIBRARY_PATH="${CUDNN_ROOT}/lib" -DCMAKE_BUILD_TYPE=Release ../pytorch_scatter
@@ -135,11 +144,18 @@ if [[ -z "${TorchScatter_ROOT}" ]]; then
     fi
     make install DESTDIR="${current_dir}/pytorch_scatter/install"
     # Add TorchScatter to path
+    TorchScatter_ROOT="${current_dir}"/pytorch_scatter/install/usr/local
+    TorchScatter_LIB="${current_dir}"/pytorch_scatter/install/usr/local/lib
+    TorchScatter_INCLUDE="${current_dir}"/pytorch_scatter/install/usr/local/include
+    TorchScatter_DIR="${current_dir}"/pytorch_scatter/install/usr/local/lib/cmake
+
+    cd ${current_dir}
+
     echo "# TorchScatter " >> env.sh
-    echo "export TorchScatter_ROOT=\"${current_dir}/pytorch_scatter/install/usr/local\"" >> env.sh
-    echo "export LD_LIBRARY_PATH=\"\${LD_LIBRARY_PATH}:${current_dir}/pytorch_scatter/install/usr/local/lib\"" >> env.sh
-    echo "export INCLUDE=\"\${INCLUDE}:${current_dir}/pytorch_scatter/install/usr/local/include\"" >> env.sh
-    echo "export TorchScatter_DIR=\"${current_dir}/pytorch_scatter/install/usr/local/share/cmake\"" >> env.sh
+    echo "export TorchScatter_ROOT=$TorchScatter_ROOT" >> env.sh
+    echo "export LD_LIBRARY_PATH=$TorchScatter_LIB:\$LD_LIBRARY_PATH" >> env.sh
+    echo "export INCLUDE=$TorchScatter_INCLUDE:\$INCLUDE" >> env.sh
+    echo "export TorchScatter_DIR=$TorchScatter_DIR" >> env.sh
 else
     echo "Info: Located TorchScatter at ${TorchScatter_ROOT}"
 fi
@@ -151,7 +167,7 @@ if [[ -z "${TorchSparse_ROOT}" ]]; then
     echo "Installing TorchSparse"
     # Install TorchSparse
     git clone --recurse-submodules https://github.com/rusty1s/pytorch_sparse
-    mkdir -p install build_sparse
+    mkdir build_sparse
     cd build_sparse
     if [[ $is_cuda_available -eq 1 ]]; then
         cmake -DCMAKE_PREFIX_PATH="${TORCH_ROOT}" -DCMAKE_INSTALL_PREFIX="" -DCUDNN_INCLUDE_PATH="${CUDNN_ROOT}/include" -DCUDNN_LIBRARY_PATH="${CUDNN_ROOT}/lib" -DCMAKE_BUILD_TYPE=Release ../pytorch_sparse
@@ -160,15 +176,25 @@ if [[ -z "${TorchSparse_ROOT}" ]]; then
     fi
     make install DESTDIR="${current_dir}/pytorch_sparse/install"
     # Add TorchSparse to path
+    TorchSparse_ROOT="${current_dir}"/pytorch_sparse/install/usr/local
+    TorchSparse_LIB="${current_dir}"/pytorch_sparse/install/usr/local/lib
+    TorchSparse_INCLUDE="${current_dir}"/pytorch_sparse/install/usr/local/include
+    TorchSparse_DIR="${current_dir}"/pytorch_sparse/install/usr/local/lib/cmake
+
+    cd ${current_dir}
+
     echo "# TorchSparse " >> env.sh
-    echo "export TorchSparse_ROOT=\"${current_dir}/pytorch_sparse/install/usr/local\"" >> env.sh
-    echo "export LD_LIBRARY_PATH=\"\${LD_LIBRARY_PATH}:${current_dir}/pytorch_sparse/install/usr/local/lib\"" >> env.sh
-    echo "export INCLUDE=\"\${INCLUDE}:${current_dir}/pytorch_sparse/install/usr/local/include\"" >> env.sh
-    echo "export TorchSparse_DIR=\"${current_dir}/pytorch_sparse/install/usr/local/share/cmake\"" >> env.sh
+    echo "export TorchSparse_ROOT=$TorchSparse_ROOT" >> env.sh
+    echo "export LD_LIBRARY_PATH=$TorchSparse_LIB:\$LD_LIBRARY_PATH" >> env.sh
+    echo "export INCLUDE=$TorchSparse_INCLUDE:\$INCLUDE" >> env.sh
+    echo "export TorchSparse_DIR=$TorchSparse_DIR" >> env.sh
+
 else
     echo "Info: Located TorchSparse at ${TorchSparse_ROOT}"
 fi
 
 echo "DONE!"
+echo "---------------------------------------------------------------------"
 echo "Please run the following command to set the environment variables"
 echo "source env.sh"
+echo "---------------------------------------------------------------------"

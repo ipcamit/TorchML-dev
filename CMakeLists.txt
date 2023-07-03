@@ -1,10 +1,9 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.10..3.18)
 
 # This model driver requires C++11
 # But ++14 works fine too, so using that for now
 # TODO check strict c++11 compliance
 
-project(TorchMLMD__MD_000000000000_000 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 cmake_policy(SET CMP0074 NEW)
 STRING(COMPARE EQUAL "${CMAKE_BUILD_TYPE}" "" flg)
@@ -78,6 +77,7 @@ find_package(KIM-API-ITEMS 2.2 REQUIRED CONFIG)
 
 # KIM-API setup --------------------------------------------------
 kim_api_items_setup_before_project(ITEM_TYPE "modelDriver")
+project(TorchMLMD__MD_000000000000_000 LANGUAGES CXX)
 kim_api_items_setup_after_project(ITEM_TYPE "modelDriver")
 
 # Find Torch (env TORCH_ROOT) and Torch Geometric dependencies

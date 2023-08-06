@@ -70,22 +70,36 @@ then
     exit
 fi
 
+# Check if git is installed
+if ! command -v git &> /dev/null
+then
+    echo "Error: git could not be found, please install git"
+    exit
+fi
+
+# Check if unzip is installed
+if ! command -v unzip &> /dev/null
+then
+    echo "Error: unzip could not be found, please install unzip"
+    exit
+fi
+
 if ! command -v kim-api-collections-management &> /dev/null
 then
     echo "Installing KIM-API"
     # Install KIM-API
     git clone https://github.com/openkim/kim-api
-    cd kim-api
+    cd kim-api || exit
     mkdir build && cd build && cmake .. && make
     make DESTDIR="${current_dir}"/kim-api/install install
-    cd ${current_dir}
+    cd ${current_dir} || exit
     # Add KIM-API to path
     echo "# KIM-API " >> env.sh
+    # KIM has to be installed with user prefix of /usr/local as otherwise CMAKE gives errors
     KIM_PATH="${current_dir}"/kim-api/install/usr/local/bin
     KIM_LIB="${current_dir}"/kim-api/install/usr/local/lib
     KIM_INCLUDE="${current_dir}"/kim-api/install/usr/local/include
 
-    echo "export PATH=$KIM_PATH:\$PATH"
     echo "export PATH=$KIM_PATH:\$PATH" >> env.sh
     echo "export LD_LIBRARY_PATH=$KIM_LIB:\$LD_LIBRARY_PATH" >> env.sh
     echo "export INCLUDE=$KIM_INCLUDE:\$INCLUDE" >> env.sh
@@ -104,11 +118,11 @@ if [[ -z "${TORCH_ROOT}" ]]; then
     # Install libtorch
     if [[ $is_cuda_available -eq 1 ]]; then
         wget https://download.pytorch.org/libtorch/cu117/libtorch-cxx11-abi-shared-with-deps-1.13.0%2Bcu117.zip
-        unzip libtorch-cxx11-abi-shared-with-deps-1.13.0+cu117.zip
+        unzip libtorch-cxx11-abi-shared-with-deps-1.13.0+cu117.zip || exit
         # rm libtorch-cxx11-abi-shared-with-deps-1.9.0+cu111.zip
     else
         wget https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-1.13.0%2Bcpu.zip
-        unzip libtorch-cxx11-abi-shared-with-deps-1.9.0+cpu.zip
+        unzip libtorch-cxx11-abi-shared-with-deps-1.9.0+cpu.zip || exit
         # rm libtorch-cxx11-abi-shared-with-deps-1.9.0+cpu.zip
     fi
     # Add libtorch to path
@@ -134,22 +148,22 @@ if [[ -z "${TorchScatter_ROOT}" ]]; then
     echo "---------------------------------------------------------------------"
     echo "Installing TorchScatter"
     # Install TorchScatter
-    git clone --recurse-submodules https://github.com/rusty1s/pytorch_scatter
-    mkdir build_scatter
-    cd build_scatter
+    git clone --recurse-submodules https://github.com/rusty1s/pytorch_scatter || exit
+    mkdir -p build_scatter
+    cd build_scatter || exit
     if [[ $is_cuda_available -eq 1 ]]; then
-        cmake -DCMAKE_PREFIX_PATH="${TORCH_ROOT}" -DCMAKE_INSTALL_PREFIX="" -DCUDNN_INCLUDE_PATH="${CUDNN_ROOT}/include" -DCUDNN_LIBRARY_PATH="${CUDNN_ROOT}/lib" -DCMAKE_BUILD_TYPE=Release ../pytorch_scatter
+        cmake -DCMAKE_PREFIX_PATH="${TORCH_ROOT}" -DCMAKE_INSTALL_PREFIX="" -DCUDNN_INCLUDE_PATH="${CUDNN_ROOT}/include" -DCUDNN_LIBRARY_PATH="${CUDNN_ROOT}/lib" -DCMAKE_BUILD_TYPE=Release ../pytorch_scatter || exit
     else
-        cmake -DCMAKE_PREFIX_PATH="${TORCH_ROOT}" -DCMAKE_INSTALL_PREFIX="" -DCMAKE_BUILD_TYPE=Release ../pytorch_scatter
+        cmake -DCMAKE_PREFIX_PATH="${TORCH_ROOT}" -DCMAKE_INSTALL_PREFIX="" -DCMAKE_BUILD_TYPE=Release ../pytorch_scatter || exit
     fi
-    make install DESTDIR="${current_dir}/pytorch_scatter/install"
+    make install DESTDIR="${current_dir}/pytorch_scatter/install" || exit
     # Add TorchScatter to path
-    TorchScatter_ROOT="${current_dir}"/pytorch_scatter/install/usr/local
-    TorchScatter_LIB="${current_dir}"/pytorch_scatter/install/usr/local/lib
-    TorchScatter_INCLUDE="${current_dir}"/pytorch_scatter/install/usr/local/include
-    TorchScatter_DIR="${current_dir}"/pytorch_scatter/install/usr/local/lib/cmake
+    TorchScatter_ROOT="${current_dir}"/pytorch_scatter/local
+    TorchScatter_LIB="${current_dir}"/pytorch_scatter/local/lib
+    TorchScatter_INCLUDE="${current_dir}"/pytorch_scatter/local/include
+    TorchScatter_DIR="${current_dir}"/pytorch_scatter/local/lib/cmake
 
-    cd ${current_dir}
+    cd ${current_dir} || exit
 
     echo "# TorchScatter " >> env.sh
     echo "export TorchScatter_ROOT=$TorchScatter_ROOT" >> env.sh
@@ -166,22 +180,22 @@ if [[ -z "${TorchSparse_ROOT}" ]]; then
     echo "---------------------------------------------------------------------"
     echo "Installing TorchSparse"
     # Install TorchSparse
-    git clone --recurse-submodules https://github.com/rusty1s/pytorch_sparse
-    mkdir build_sparse
-    cd build_sparse
+    git clone --recurse-submodules https://github.com/rusty1s/pytorch_sparse || exit
+    mkdir -p build_sparse
+    cd build_sparse || exit
     if [[ $is_cuda_available -eq 1 ]]; then
-        cmake -DCMAKE_PREFIX_PATH="${TORCH_ROOT}" -DCMAKE_INSTALL_PREFIX="" -DCUDNN_INCLUDE_PATH="${CUDNN_ROOT}/include" -DCUDNN_LIBRARY_PATH="${CUDNN_ROOT}/lib" -DCMAKE_BUILD_TYPE=Release ../pytorch_sparse
+        cmake -DCMAKE_PREFIX_PATH="${TORCH_ROOT}" -DCMAKE_INSTALL_PREFIX="" -DCUDNN_INCLUDE_PATH="${CUDNN_ROOT}/include" -DCUDNN_LIBRARY_PATH="${CUDNN_ROOT}/lib" -DCMAKE_BUILD_TYPE=Release ../pytorch_sparse || exit
     else
-        cmake -DCMAKE_PREFIX_PATH="${TORCH_ROOT}" -DCMAKE_INSTALL_PREFIX="" -DCMAKE_BUILD_TYPE=Release ../pytorch_sparse
+        cmake -DCMAKE_PREFIX_PATH="${TORCH_ROOT}" -DCMAKE_INSTALL_PREFIX="" -DCMAKE_BUILD_TYPE=Release ../pytorch_sparse || exit
     fi
-    make install DESTDIR="${current_dir}/pytorch_sparse/install"
+    make install DESTDIR="${current_dir}/pytorch_sparse/install" || exit
     # Add TorchSparse to path
-    TorchSparse_ROOT="${current_dir}"/pytorch_sparse/install/usr/local
-    TorchSparse_LIB="${current_dir}"/pytorch_sparse/install/usr/local/lib
-    TorchSparse_INCLUDE="${current_dir}"/pytorch_sparse/install/usr/local/include
-    TorchSparse_DIR="${current_dir}"/pytorch_sparse/install/usr/local/lib/cmake
+    TorchSparse_ROOT="${current_dir}"/pytorch_sparse/install
+    TorchSparse_LIB="${current_dir}"/pytorch_sparse/install/lib
+    TorchSparse_INCLUDE="${current_dir}"/pytorch_sparse/install/include
+    TorchSparse_DIR="${current_dir}"/pytorch_sparse/install/lib/cmake
 
-    cd ${current_dir}
+    cd ${current_dir} || exit
 
     echo "# TorchSparse " >> env.sh
     echo "export TorchSparse_ROOT=$TorchSparse_ROOT" >> env.sh

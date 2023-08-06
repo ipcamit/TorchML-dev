@@ -86,7 +86,7 @@ int TorchMLModelDriver::Refresh(KIM::ModelRefresh *const modelRefresh) {
     TorchMLModelDriver *modelObject;
     modelRefresh->GetModelBufferPointer(reinterpret_cast<void **>(&modelObject));
 
-    return TorchMLModelDriverImplementation::Refresh(modelRefresh);
+    return modelObject->implementation_->Refresh(modelRefresh);
 }
 
 //******************************************************************************
@@ -110,7 +110,7 @@ int TorchMLModelDriver::ComputeArgumentsCreate(
         KIM::ModelComputeArgumentsCreate *const modelComputeArgumentsCreate) {
     TorchMLModelDriver *modelObject;
     modelCompute->GetModelBufferPointer(reinterpret_cast<void **>(&modelObject));
-    return TorchMLModelDriverImplementation::ComputeArgumentsCreate(modelComputeArgumentsCreate);
+    return modelObject->implementation_->ComputeArgumentsCreate(modelComputeArgumentsCreate);
 }
 
 //******************************************************************************
@@ -120,6 +120,6 @@ int TorchMLModelDriver::ComputeArgumentsDestroy(
         KIM::ModelComputeArgumentsDestroy *const modelComputeArgumentsDestroy) {
     TorchMLModelDriver *modelObject;
     modelCompute->GetModelBufferPointer(reinterpret_cast<void **>(&modelObject));
-    return TorchMLModelDriverImplementation::ComputeArgumentsDestroy(modelComputeArgumentsDestroy);
+    return modelObject->implementation_->ComputeArgumentsDestroy(modelComputeArgumentsDestroy);
 
 }

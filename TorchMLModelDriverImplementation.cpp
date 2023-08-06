@@ -124,14 +124,22 @@ TorchMLModelDriverImplementation::TorchMLModelDriverImplementation(
 }
 
 //******************************************************************************
+// TODO: Can be done with templating. Deal with it later
 int TorchMLModelDriverImplementation::Refresh(KIM::ModelRefresh *const modelRefresh) {
-    TorchMLModelDriver *modelObject; //To silence the compiler
-    modelRefresh->GetModelBufferPointer(reinterpret_cast<void **>(&modelObject));
+    modelRefresh->SetInfluenceDistancePointer(&influence_distance);
+    modelRefresh->SetNeighborListPointers(1, &cutoff_distance,
+                                          &modelWillNotRequestNeighborsOfNoncontributingParticles_);
     // As all param are part of torch model, nothing to do here?
     // TODO Distance matrix for computational efficiency, which will be refreshed to -1
     return false;
 }
-
+int TorchMLModelDriverImplementation::Refresh(KIM::ModelDriverCreate *const modelRefresh) {
+    modelRefresh->SetInfluenceDistancePointer(&influence_distance);
+    modelRefresh->SetNeighborListPointers(1, &cutoff_distance,
+                                          &modelWillNotRequestNeighborsOfNoncontributingParticles_);
+    // TODO Distance matrix for computational efficiency, which will be refreshed to -1
+    return false;
+}
 //******************************************************************************
 int TorchMLModelDriverImplementation::Compute(
         KIM::ModelComputeArguments const *const modelComputeArguments) {

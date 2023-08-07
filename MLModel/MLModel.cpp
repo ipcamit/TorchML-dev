@@ -192,11 +192,6 @@ void PytorchModel::Run(c10::IValue &out_tensor) {
     // method return a tuple where the energy is the first entry and
     // the forces are the second
 
-    for (auto& tensors: model_inputs_){
-        std::cout << tensors.toTensor().sizes();
-        std::cout << tensors;
-    }
-
     out_tensor = module_.forward(model_inputs_);
 }
 

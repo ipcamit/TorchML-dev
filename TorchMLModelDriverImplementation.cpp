@@ -604,10 +604,11 @@ void TorchMLModelDriverImplementation::setGraphInputs(const KIM::ModelComputeArg
         }
     }
 
+    int effectiveNumberOfParticlePointers  = (*numberOfParticlesPointer == 1) ? 2 : *numberOfParticlesPointer;
 
-    ml_model->SetInputNode(0, species_atomic_number, *numberOfParticlesPointer, false);
+    ml_model->SetInputNode(0, species_atomic_number, effectiveNumberOfParticlePointers, false);
 
-    std::vector<int> input_tensor_size({*numberOfParticlesPointer, 3});
+    std::vector<int> input_tensor_size({effectiveNumberOfParticlePointers, 3});
     ml_model->SetInputNode(1, coordinates, input_tensor_size, true);
 
     for (int i = 0; i < n_layers; i++) {
@@ -619,11 +620,11 @@ void TorchMLModelDriverImplementation::setGraphInputs(const KIM::ModelComputeArg
         contraction_array = nullptr;
     }
 
-    contraction_array = new int64_t[*numberOfParticlesPointer];
-    for (int i = 0; i < *numberOfParticlesPointer; i++) {
+    contraction_array = new int64_t[effectiveNumberOfParticlePointers];
+    for (int i = 0; i < effectiveNumberOfParticlePointers; i++) {
         contraction_array[i] = (i < n_contributing_atoms) ? 0 : 1;
     }
-    ml_model->SetInputNode(2 + n_layers, contraction_array, *numberOfParticlesPointer, false);
+    ml_model->SetInputNode(2 + n_layers, contraction_array, effectiveNumberOfParticlePointers, false);
 }
 
 // --------------------------------------------------------------------------------

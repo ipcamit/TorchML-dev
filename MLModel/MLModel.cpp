@@ -182,7 +182,6 @@ void PytorchModel::SetInputNode(int model_input_index, int layer,
     model_inputs_[model_input_index] = edge_index;
 }
 
-
 void PytorchModel::Run(c10::IValue &out_tensor) {
     // FIXME: Make this work for arbitrary number/type of outputs?  This may
     // lead us to make Run() take no parameters, and instead define separate
@@ -192,6 +191,11 @@ void PytorchModel::Run(c10::IValue &out_tensor) {
     // IMPORTANT: We require that the pytorch model's `forward`
     // method return a tuple where the energy is the first entry and
     // the forces are the second
+
+    for (auto& tensors: model_inputs_){
+        std::cout << tensors.toTensor().sizes();
+        std::cout << tensors;
+    }
 
     out_tensor = module_.forward(model_inputs_);
 }

@@ -29,8 +29,9 @@ Summary of dependencies:
 At present lot of these dependencies are tied to my dev environment, but soon they will be a more independent CMake project.
 
 > You can install above dependencies using the `install_dependencies.sh` script, by running
-`wget https://raw.githubusercontent.com/ipcamit/colabfit-model-driver/master/install_dependencies.sh && bash install_dependencies.sh`
+`wget https://raw.githubusercontent.com/ipcamit/colabfit-model-driver/master/install_dependencies.sh && CC=gcc CXX=g++ bash install_dependencies.sh`
 
+You can use `CC` and `CXX` variables to provide your own compilers.
 For more detailed instructions on installing dependencies, see below.
 ## Install
 As it is a KIM model, installation is simply cloning the repo and installing it as KIM model:

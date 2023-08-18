@@ -158,10 +158,10 @@ if [[ -z "${TorchScatter_ROOT}" ]]; then
     fi
     make install DESTDIR="${current_dir}/pytorch_scatter/install" || exit
     # Add TorchScatter to path
-    TorchScatter_ROOT="${current_dir}"/pytorch_scatter/local
-    TorchScatter_LIB="${current_dir}"/pytorch_scatter/local/lib
-    TorchScatter_INCLUDE="${current_dir}"/pytorch_scatter/local/include
-    TorchScatter_DIR="${current_dir}"/pytorch_scatter/local/lib/cmake
+    TorchScatter_ROOT="${current_dir}"/pytorch_scatter/install
+    TorchScatter_LIB="${current_dir}"/pytorch_scatter/install/lib
+    TorchScatter_INCLUDE="${current_dir}"/pytorch_scatter/install/include
+    TorchScatter_DIR="${current_dir}"/pytorch_scatter/install/lib/cmake
 
     cd ${current_dir} || exit
 

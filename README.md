@@ -4,8 +4,7 @@
 This repository will contain a core model driver, that would provide easy one-place solution to rapidly
 develop and test various iterations/ideas for the model driver, and also test their conflicts/incompatibilities.
 For actual application and "production", a specialized model driver can be easily derived from the core library, by removing 
-unnecessary components (for example, see branch [`just-graph-nn`](https://github.com/ipcamit/colabfit-model-driver/tree/just-graph-nn) 
- for a minimal dependency GNN driver). 
+unnecessary components. 
 
 <img src="modelDriververticle.svg" width="800">
 

@@ -6,6 +6,7 @@
 
 #ifdef USE_MPI
 #include <mpi.h>
+#include <algorithm>
 #endif
 
 #include <torch/script.h>
@@ -39,11 +40,25 @@ void PytorchModel::SetExecutionDevice(const char *const device_name) {
         int rank=0, size = 0;
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
         MPI_Comm_size(MPI_COMM_WORLD, &size);
-        auto kim_model_mpi_aware_env_var = std::getenv("KIM_MODEL_MPI_AWARE");
-        if ((kim_model_mpi_aware_env_var != NULL) && (strcmp(kim_model_mpi_aware_env_var, "yes") == 0)){
-            device_name_as_str += ":";
-            device_name_as_str += std::to_string(rank);
+        // get number of cuda devices visible
+        auto cuda_device_visible_env_var = std::getenv("CUDA_VISIBLE_DEVICES"); //input "0,1,2"
+        int num_cuda_devices_visible = 0;
+        if (cuda_device_visible_env_var != nullptr){
+            std::string cuda_device_visible_env_var_str(cuda_device_visible_env_var);
+            num_cuda_devices_visible = std::count(cuda_device_visible_env_var_str.begin(), cuda_device_visible_env_var_str.end(), ',') + 1;
+        } else {
+            throw std::invalid_argument("CUDA_VISIBLE_DEVICES not set\n "
+                                        "You requested for manual MPI aware device allocation but CUDA_VISIBLE_DEVICES is not set\n");
         }
+        // assign cuda device to ranks in round-robin fashion
+        device_name_as_str += ":";
+        device_name_as_str += std::to_string(rank % num_cuda_devices_visible);
+
+        // auto kim_model_mpi_aware_env_var = std::getenv("KIM_MODEL_MPI_AWARE");
+        // if ((kim_model_mpi_aware_env_var != NULL) && (strcmp(kim_model_mpi_aware_env_var, "yes") == 0)){
+        //     device_name_as_str += ":";
+        //     device_name_as_str += std::to_string(rank);
+        // }
         #endif
     }
     device_ = new torch::Device(device_name_as_str);

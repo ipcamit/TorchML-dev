@@ -38,6 +38,7 @@ void PytorchModel::SetExecutionDevice(const char *const device_name) {
         //n devices for n ranks, it will crash if MPI != GPU
         // TODO: Add a check if GPU aware MPI can be used
         #ifdef USE_MPI
+        std::cout << "INFO: Using MPI aware GPU allocation" << std::endl;
         int rank=0, size = 0;
         MPI_Comm_rank(MPI_COMM_WORLD, &rank);
         MPI_Comm_size(MPI_COMM_WORLD, &size);
@@ -56,7 +57,14 @@ void PytorchModel::SetExecutionDevice(const char *const device_name) {
         device_name_as_str += std::to_string(rank % num_cuda_devices_visible);
         char hostname[256];
         gethostname(hostname, 256);
-        std::cout << "INFO: Rank " << rank << " on " << hostname << " is using device " << device_name_as_str << std::endl;
+        // poor man's sync print
+        for (int i = 0; i < size; i++) {
+            MPI_Barrier(MPI_COMM_WORLD);
+            if (i == rank) {
+                std::cout << "INFO: Rank " << rank << " on " << hostname << " is using device " << device_name_as_str << std::endl;
+            }
+            MPI_Barrier(MPI_COMM_WORLD);
+        }
 
         // auto kim_model_mpi_aware_env_var = std::getenv("KIM_MODEL_MPI_AWARE");
         // if ((kim_model_mpi_aware_env_var != NULL) && (strcmp(kim_model_mpi_aware_env_var, "yes") == 0)){

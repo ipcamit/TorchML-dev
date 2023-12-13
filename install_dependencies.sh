@@ -122,8 +122,8 @@ if [[ -z "${TORCH_ROOT}" ]]; then
         # rm libtorch-cxx11-abi-shared-with-deps-1.9.0+cu111.zip
     else
         wget https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-1.13.0%2Bcpu.zip
-        unzip libtorch-cxx11-abi-shared-with-deps-1.9.0+cpu.zip || exit
-        # rm libtorch-cxx11-abi-shared-with-deps-1.9.0+cpu.zip
+        unzip libtorch-cxx11-abi-shared-with-deps-1.13.0+cpu.zip || exit
+        # rm libtorch-cxx11-abi-shared-with-deps-1.13.0+cpu.zip
     fi
     # Add libtorch to path
     TORCH_ROOT="${current_dir}"/libtorch

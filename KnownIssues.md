@@ -17,7 +17,7 @@ CC=gcc CXX=g++ cmake ..
 
 ### 2. `libcuda.so.1: cannot open shared object file`
 Cuda installations come with two set of libraries, `libcudart.so`, which is the actual cuda
-imprementation, and old `libcuda.so` which are stubs for legacy purposes. Easiest workaround
+implementation, and old `libcuda.so` which are stubs for legacy purposes. Easiest workaround
 is 
 1. to either compile your code on execution node, or
 2. symlink libcudart as libcuda at a local location for compiling purposes,

@@ -77,7 +77,7 @@ TorchMLModelDriverImplementation::TorchMLModelDriverImplementation(
     // Register Parameters --------------------------------------------------------------
     // All model parameters are inside model So nothing to do here? Just Registering
     // n_elements lest KIM complaints. TODO Discuss with Ryan?
-    *ier = modelDriverCreate->SetParameterPointer(1, &n_elements, "n_elements", "slope");
+    *ier = modelDriverCreate->SetParameterPointer(1, &n_elements, "n_elements", "Number of elements");
     LOG_DEBUG("Registered Parameter");
     if (*ier) return;
 
@@ -862,6 +862,7 @@ void TorchMLModelDriverImplementation::unitConversion(KIM::ModelDriverCreate *co
 
 // --------------------------------------------------------------------------------
 void TorchMLModelDriverImplementation::setSpecies(KIM::ModelDriverCreate *const modelDriverCreate, int *const ier) {
+    int code = 0;
     for (auto const &species: elements_list) {
         KIM::SpeciesName const specName1(species);
 
@@ -872,7 +873,8 @@ void TorchMLModelDriverImplementation::setSpecies(KIM::ModelDriverCreate *const 
         //    // check for new species
         //    std::map<KIM::SpeciesName const, int, KIM::SPECIES_NAME::Comparator>::const_iterator iIter = modelSpeciesMap.find(specName1);
         // all the above is to remove species duplicates
-        *ier = modelDriverCreate->SetSpeciesCode(specName1, 0);
+        *ier = modelDriverCreate->SetSpeciesCode(specName1, code);
+        code += 1;
         if (*ier) return;
     }
 }

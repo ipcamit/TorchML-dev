@@ -1,10 +1,29 @@
-# KIM ML Model Driver
+# Torch ML Model Driver
 
- `TorchMLModelDriver` is the base driver needed for [COLABFIT portable models](https://github.com/ipcamit/colabfit-portable-models). 
-This repository will contain a core model driver, that would provide easy one-place solution to rapidly
-develop and test various iterations/ideas for the model driver, and also test their conflicts/incompatibilities.
-For actual application and "production", a specialized model driver can be easily derived from the core library, by removing 
-unnecessary components. 
+ `TorchMLModelDriver` is the base driver needed for machine learning based portable models. 
+This driver provides the interface between KIM-API and TorchScript models. It works with
+any arbitrary model as long as the models are TorchScript compatible and follow one of the following
+calling conventions in their `forward` method`:
+
+1. `forward(self, species, coords, n_neigh, nlist, contributing)`
+2. `forward(self, descriptor)`
+3. `forward(self, species, coords, graph_layer1, graph_layer2,..., contributing)`
+
+Pattern 1 is for more conventional models which require the raw information about the system, namely
+species, coordinates, number of neighbors, neighbor list and contributing atoms. Pattern 2 is for
+descriptor based models, where the descriptor is computed by the KIM-API and passed to the model. 
+The descriptor computation is done by the `libdescriptor` library, which is a C++ library for computing
+descriptor and their gradients. Pattern 3 is for graph neural networks, where the model takes the
+species, coordinates and the graph layers as input. The graph layers are computed by the model driver itself
+and uses the staged graphs approach for parallelization. In the GNN models on the Pytorch Geometric library is
+supported, as DGL does not support TorchScript yet.
+
+The models are supposed to provide either energy as output, or energy and forces as output. The model driver
+will compute the forces from the energy, if the model does not provide the forces. If the energy tensor is not
+a scalar, the model driver will sum the energy tensor to get the total energy, and assign the per atom energy
+to all contributing atoms.
+
+Below is the diagram showing the flow of information in the model driver.
 
 <img src="modelDriververticle.svg" width="800">
 
@@ -13,25 +32,25 @@ Model driver depends on several libraries for it to functions seamlessly. And it
 provided by the user at runtime. The core requirement of ML model driver is `libtorch` library that provides the interface
 between the KIM model driver's C++ API and the TorchScript models. For Graph Neural Networks, the Torch model
 shall use [Pytorch Geometric Library](https://github.com/pyg-team/pytorch_geometric). The C++ API of Pytorch Geometric lib
-depends upon `torch-scatter` and `torch-sparse` libraries, for which there is a simple installation script has been provided
-in `torch_geometric_dependencies` folder (details in Install section). Descriptor support needs Enzyme AD support for 
-gradients computation.
+depends upon `torch-scatter` and `torch-sparse` libraries. The `libdescriptor` library is used for descriptor based models.
 
 Summary of dependencies:
-- libtorch (CXX11 ABI, v1.11)
+- libtorch (CXX11 ABI, v1.13)
 - KIM-API (v2.3)
-- libdescriptor (0.0.1)
-- Enzyme AD (0.0.41)
-- libtorchscatter (18d3759)
-- libtorchsparse  (aeca5cf)
+- libdescriptor (0.0.7)
+- Enzyme AD (0.0.94)
+- libtorchscatter
+- libtorchsparse
 
-At present lot of these dependencies are tied to my dev environment, but soon they will be a more independent CMake project.
 
-> You can install above dependencies using the `install_dependencies.sh` script, by running
-`wget https://raw.githubusercontent.com/ipcamit/colabfit-model-driver/master/install_dependencies.sh && CC=gcc CXX=g++ bash install_dependencies.sh`
+> You can install above dependencies using the `install_dependencies.sh` script. 
 
+This script shall install all the dependencies in the current directory, and give a `env.sh` file that can be sourced for
+setting the environment variables.
+For more fine-grained control, you can install them manually using the scripts in `torch_geometric_dependencies` folder. 
 You can use `CC` and `CXX` variables to provide your own compilers.
 For more detailed instructions on installing dependencies, see below.
+
 ## Install
 As it is a KIM model, installation is simply cloning the repo and installing it as KIM model:
 ```shell
@@ -47,31 +66,30 @@ require variables for dependency resolution namely,
 
 `libtorch` is simple to install, you need not build it from source, but rather just download them libtorch binaries from
 PyTorch website, and put them at appropriate system paths.
+For GPU support, you need to download the CUDA enabled binaries fo libtorch, along with the CUDNN library, which libtorch
+depends upon. For CUDNN library please register and download them from [NVIDIA website](https://developer.nvidia.com/rdp/cudnn-archive).
 
-`libtorchscatter` and `libtorchsparse` can be installed by going in to `torch_geometric_dependencies` folder and executing
-the `make_pyg.sh` script. When the script has finished installing the dependencies, it will give out bash commands
-to run for making the env available for compiling.
+## Environment Variables
+The model driver depends on several environment variables for enhanced functionality. The following environment variables
+are used by the model driver:
 
-```shell
-cd colabfit-model-driver/torch_geometric_dependencies
-./make_pyg.sh
+### Compile Time Variables
+1. `KIM_MODEL_MPI_AWARE` -  If set to `yes` (*case-sensitive*), during driver installation the model driver will be built
+with MPI support and will require a valid MPI environment to be present at installation time. This ensures a more hardware 
+agnostic allocation of GPU resources. Specifically, this will set up `n` GPUs on each node to be used for `m` ranks on 
+the same node in a round-robin fashion (i.e. rank `m` will receive GPU number [`m` mod `n`])
+2. `KIM_MODEL_DISBALE_GRAPH` - If this environment variable is defined (irrespective of value), the model driver will be
+built without graph support. This means during build time it will not try to find and link against `libtorchscatter` and
+`libtorchsparse` libraries, and will not support models with pattern 3.
 
-# example output
-export INCLUDE="${INCLUDE}:/home/colabfit-model-driver/torch_geometric_dependencies/install/include"
-export LD_LIBRRAY_PATH="${LD_LIBRARY_PATH}:/home/colabfit-model-driver/torch_geometric_dependencies/install/lib"
-export TorchScatter_DIR="/home/colabfit-model-driver/torch_geometric_dependencies/install/share/cmake"
-export TorchSparse_DIR="/home/colabfit-model-driver/torch_geometric_dependencies/install/share/cmake"
-
-```
-TODO: append the outputs
-
-## Enabling GPU Support
-To enable evaluation of the Torch Model on GPU, set the `KIM_MODEL_EXECUTION_DEVICE` environment variable to `cuda`
+### Runtime Variables
+1. `KIM_MODEL_ELEMENTS_MAP` - If set to any value during runtime, will enable mapping of elements to their atomic numbers.
+2. `KIM_MODEL_EXECUTION_DEVICE` - If set to `cuda` during runtime, will enable evaluation of the Torch Model on GPU.
 ```shell
 export KIM_MODEL_EXECUTION_DEVICE="cuda"
 
 # Set visible devices if needed
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=0,1,2
 ```
 Because KIM model driver is inherently compatible with LAMMPS domain decomposition, enabling distributed
 GPU support is as simple as just running LAMMPS with multiple ranks.
@@ -80,69 +98,38 @@ Also, at present Torch model resides on GPU, independent of the LAMMPS, so follo
 2. As every evaluation needs copying data from CPU to GPU and vice versa, so to see benefits of GPU you might need 
 system of substantial size.
 
-## Caveats
-### Compiling and libcuda error
-Sometimes in HPC environment you might get an error during installation, stating
+## Known Installation Issues
+During installation, you might encounter following error messages
 
+### 1. `Could not locate pthreads/ Threads.cmake` etc
+Usually any comparatively modern Linux installation would come with a valid posix threads library. 
+In some HPC with minimal or older linux installations, you might get above error because the default compiler
+might be some minimal CC wrapper that cannot detect it. Easiest way forward is to simply provide
+a valid C and C++ compilers as,
+```shell
+CC=mpicc CXX=mpic++ bash install_dependencies.sh
+# or
+CC=gcc CXX=g++ cmake ..
+# etc. etc. 
 ```
-Unable to open shared library.
-libcuda.so.1: cannot open shared object file: No such file or directory
-```
-This usually happens because `libtorch` tries to link against a shared library named `libcuda.so`, but it seems that
-in CUDA that library has been deprecated in favor of `libcudart.so`. You can overcome it in two ways
-1. During compile time add `/path/to/cuda/lib64/stubs` to your `LD_LIBRARY_PATH` env variable. This links against the stub
-`libcuda` library. 
-2. In case the `stubs` is not installed on your system, you can simply symlink to `libcudart` as 
-`ln -s /path/to/cuda/lib64/libcudart.so libcuda.so.1` before kim install. 
 
-Please not that you might run in issues if `stubs` folder is present in `LD_LIBRARY_PATH` or `libcuda.so.1` 
-link is present at runtime. So better to ensure that is not the case when submitting the job, by either using a 
-fresh bash shell or removing `libcuda.so.1` link after installation.
+### 2. `libcuda.so.1: cannot open shared object file`
+CUDA installations come with two set of libraries, `libcudart.so`, which is the actual cuda
+implementation, and old `libcuda.so` which are stubs for legacy purposes. Easiest workaround
+is 
+1. to either compile your code on execution node, or
+2. symlink libcudart as libcuda at a local location for compiling purposes,
+3. setup cuda env properly, the stubs are kept at `$CUDA_ROOT/lib64/stubs`, add it to `LD_LIBRARY_PATH`
 
-### Multiple GPU
-Two of the following MPI-GPU configurations work out of the box, and need no changes or modification
-1. 1 MPI rank per node, with 1 GPU per rank (1 MPI rank per GPU, 1 GPU per per node)
-2. `n` MPI ranks on 1 node and 1 GPU per node (`n` MPI ranks on 1 GPU, only 1 node)
+If everything else fails, you can try manually compiling it as a last resort. 
+You can do that by making a build folder inside the repository and just compiling `cmake .. && make`.
+Following which keep the compiled `libkim-api-model-driver.so` object in 
+`~/.kim-api/2.3.0+v*/model-drivers-dir/TorchMLMD__MD_000000000000_000` folder.
+Again please note that this must be kept as a last resort option, and one above solutions should work.
 
-Following hardware configurations are **not supported** yet,
-1. `n` GPU per `m` MPI ranks with `m != n`
-2. `n` GPU per `n` MPI ranks, but ranks per node not equal to 1
 
-In short, you need either you need all MPI ranks on same node, with single GPU, or you need 1 rank per node for `n` GPU
-spread across `n` nodes.
+### 3. Compilation runs in infinite loop
+cmake > 3.18 have bug that runs in infinite compilation loops in some cases, please use cmake <= 3.18
 
 ---
 
-### Optional Build options
-By default, the model driver tries to take a "maximal" approach to the dependencies, and tries to build all the required
-dependencies and features. However, you can disable some features by setting the following environment variables:
-1. `KIM_MODEL_MPI_AWARE` - If set to `yes` (*case-sensitive*) during driver installation, the model driver will be built
-with MPI support, where `n` GPU devices are used for `n` ranks on single node (more details below).
-2. `KIM_MODEL_DISBALE_GRAPH` - If this environment variable is defined (irrespective of value), the model driver will be
-built without graph support. This means during build time it will not try to find and link against `libtorchscatter` and
-`libtorchsparse` libraries. 
-3. If the model driver does not detect `libdescriptor` library installed on the system, or no `LIBDESCRIPTOR_ROOT` environment
-variable is defined, the model driver will be built without the descriptor support. This is achieved by not passing
-`-DLIB_DESC` flag at compile time. Other than `LIBDESCRIPTOR_ROOT` environment variable, the build script looks for the 
-`libdescriptor` in `/usr/local/lib` directory.
-
-### Temporary Runtime Flag
-The model driver also supports a temporary runtime environmental variable `KIM_MODEL_ELEMENTS_MAP`, which if set to any 
-value during runtime, will enable mapping of elements to their atomic numbers. If this variable is not set, the model
-driver will assign 0 - n indices to the atomic species. This option might get removed in future when this
-information will be provided with the portable model.
-
----
-> Note: `just-graph-nn` branch is deprecated. Now the model driver can compile or omit requisite dependencies. 
----
-
-## Docker Support
-This repository also contains a Dockerfile that can be used to create a docker environment with full KIM Torch ML Model
-Driver installed, along with all the dependencies (`libtorch_cpu`, `libtorchscatter`, `libtorchsparse`, `libdescriptor`). 
-It is based on [KIM Developer Platform](https://github.com/openkim/developer-platform) docker image, hence comes pre-installed with LAMMPS and KIM-API.
-This result in > 5GB image, but it is one of the most the simplest way to install full driver on CPU, sadly it contains
-no GPU support, yet. 
-
-If you need to see some examples of portable models for KIMTorchMLModelDriver, please check [here](https://github.com/ipcamit/colabfit-portable-models).
-The linked repository contains three kind of models that are supported out of the box, along with three toy models for Si.
-Please note that these are very small toy models that should not see any serious work!

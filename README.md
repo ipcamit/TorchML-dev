@@ -43,34 +43,27 @@ Summary of dependencies:
 - libtorchsparse
 
 
-> You can install above dependencies using the `install_dependencies.sh` script. 
+> If your compute environment does not contain these dependencies, you can install above dependencies using the `install_dependencies.sh` script provided with the model driver source. 
 
 This script shall install all the dependencies in the current directory, and give a `env.sh` file that can be sourced for
 setting the environment variables.
-For more fine-grained control, you can install them manually using the scripts in `torch_geometric_dependencies` folder. 
-You can use `CC` and `CXX` variables to provide your own compilers.
 For more detailed instructions on installing dependencies, see below.
 
 ## Install
-As it is a KIM model, installation is simply cloning the repo and installing it as KIM model:
-```shell
-git clone https:github.com/ipcamit/colabfit-model-driver
-kim-api-collections-management install user colabfit-model-driver
-```
-That is it! if all dependencies are met, that is all you need to make it work. Your shell environment should provide
-require variables for dependency resolution namely,
+If all dependencies are met, installation should be as simple as calling the appropriate `kim-api-collections-management` command. 
+Your shell environment should provide required variables for dependency resolution namely,
 1. `TORCH_ROOT` 
 2. `TorchScatter_ROOT` 
 3. `TorchSparse_ROOT`
 4. `LIBDESCRIPTOR_ROOT`
 
-`libtorch` is simple to install, you need not build it from source, but rather just download them libtorch binaries from
+`libtorch` is simple to install, just download them libtorch binaries from
 PyTorch website, and put them at appropriate system paths.
-For GPU support, you need to download the CUDA enabled binaries fo libtorch, along with the CUDNN library, which libtorch
+For GPU support, you need to download the CUDA enabled binaries for libtorch, along with the CUDNN library, which libtorch
 depends upon. For CUDNN library please register and download them from [NVIDIA website](https://developer.nvidia.com/rdp/cudnn-archive).
 
 ## Environment Variables
-The model driver depends on several environment variables for enhanced functionality. The following environment variables
+The model driver provides several environment variables for enhanced functionality. The following environment variables
 are used by the model driver:
 
 ### Compile Time Variables
@@ -101,6 +94,9 @@ system of substantial size.
 ## Known Installation Issues
 During installation, you might encounter following error messages
 
+
+During installation, you might encounter following error messages
+
 ### 1. `Could not locate pthreads/ Threads.cmake` etc
 Usually any comparatively modern Linux installation would come with a valid posix threads library. 
 In some HPC with minimal or older linux installations, you might get above error because the default compiler
@@ -114,22 +110,12 @@ CC=gcc CXX=g++ cmake ..
 ```
 
 ### 2. `libcuda.so.1: cannot open shared object file`
-CUDA installations come with two set of libraries, `libcudart.so`, which is the actual cuda
+Cuda installations come with two set of libraries, `libcudart.so`, which is the actual cuda
 implementation, and old `libcuda.so` which are stubs for legacy purposes. Easiest workaround
 is 
 1. to either compile your code on execution node, or
 2. symlink libcudart as libcuda at a local location for compiling purposes,
 3. setup cuda env properly, the stubs are kept at `$CUDA_ROOT/lib64/stubs`, add it to `LD_LIBRARY_PATH`
 
-If everything else fails, you can try manually compiling it as a last resort. 
-You can do that by making a build folder inside the repository and just compiling `cmake .. && make`.
-Following which keep the compiled `libkim-api-model-driver.so` object in 
-`~/.kim-api/2.3.0+v*/model-drivers-dir/TorchMLMD__MD_000000000000_000` folder.
-Again please note that this must be kept as a last resort option, and one above solutions should work.
-
-
 ### 3. Compilation runs in infinite loop
 cmake > 3.18 have bug that runs in infinite compilation loops in some cases, please use cmake <= 3.18
-
----
-

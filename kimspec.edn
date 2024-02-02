@@ -1,10 +1,10 @@
 {"contributor-id" "729049db-685a-43b1-97a8-617daa2586ba"
- "creator" "Amit Gupta"
- "description" "Model driver for enabling inference with TorchScript based MLIPs, in KIM_API."
+ "description" "Model driver (MD) for TorchScript based machine learning interatomic potentials (MLIPs). This MD interfaces with libtorch (the pytorch C++ interface), and libdescriptor.\nDependencies:\n1. Libtorch [essential]\n2. torch_scatter [optional for GNNs]\n3. torch_sparse [optional for GNNs]\n4. libdescriptor  [optional for descriptor based models]\nThe dependencies can be installed using the provided script \"install_dependencies.sh\" (see files below) which installs all the dependencies in the currently working folder. To activate the environment source the generated `env.sh` file (or copy its contents into a `.bashrc` file to autmatically initializing the environment in the future).\n\nThe MD provides an option for offloading the MLIP computations to GPUs. This option is activated by setting the environment variable `KIM_MODEL_EXECUTION_DEVICE` to \"cuda\".\n\nThere are also several compilation options to modify the MD behavior, controlled by setting environmental variables.\n1. `KIM_MODEL_MPI_AWARE` - If set to `yes` (*case-sensitive*), during driver installation the model driver will be built\nwith MPI support and will require a valid MPI environment to be present at installation time. This ensures a more hardware agnostic allocation of GPU resources.\nSpecifically, this will set up `n` GPUs on each node to be used for `m` ranks on the same node in a round-robin fashion (i.e. rank `m` will receive GPU number [`m` mod `n`]).\n2. `KIM_MODEL_DISBALE_GRAPH` - If this environment variable is defined (irrespective of value), the model driver will be\nbuilt without graph support. This means that during build time it will not try to find and link against `libtorchscatter` and\n`libtorchsparse` libraries. \n\n\nConsult the README.md file for fixing commonly installation problems."
+ "developer" ["729049db-685a-43b1-97a8-617daa2586ba"
+              "4d62befd-21c4-42b8-a472-86132e6591f3"]
  "domain" "openkim.org"
  "executables" ["install_dependencies.sh"]
- "extended-id" "TorchMLMD__MD_000000000000_000"
- "kim-api-version" "2.0"
+ "extended-id" "TorchML__MD_339325120506_000"
+ "kim-api-version" "2.3"
  "maintainer-id" "729049db-685a-43b1-97a8-617daa2586ba"
- "publication-year" "2023"
  "title" "Torch ML model driver v000"}

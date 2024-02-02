@@ -77,7 +77,7 @@ find_package(KIM-API-ITEMS 2.2 REQUIRED CONFIG)
 
 # KIM-API setup --------------------------------------------------
 kim_api_items_setup_before_project(ITEM_TYPE "modelDriver")
-project(TorchMLMD__MD_000000000000_000 LANGUAGES CXX)
+project(TorchML__MD_000000000000_000 LANGUAGES CXX)
 kim_api_items_setup_after_project(ITEM_TYPE "modelDriver")
 
 # Find Torch (env TORCH_ROOT) and Torch Geometric dependencies

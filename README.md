@@ -50,7 +50,7 @@ setting the environment variables.
 For more detailed instructions on installing dependencies, see below.
 
 ## Install
-If all dependencies are met, installation should be as simple as calling the appropriate `kim-api-collections-management` command. 
+If all dependencies are met, installation should be as simple as calling the appropriate `kim-api-collections-management install` command. 
 Your shell environment should provide required variables for dependency resolution namely,
 1. `TORCH_ROOT` 
 2. `TorchScatter_ROOT` 
@@ -92,8 +92,6 @@ Also, at present Torch model resides on GPU, independent of the LAMMPS, so follo
 system of substantial size.
 
 ## Known Installation Issues
-During installation, you might encounter following error messages
-
 
 During installation, you might encounter following error messages
 

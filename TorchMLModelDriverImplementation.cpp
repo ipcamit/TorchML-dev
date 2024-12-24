@@ -876,39 +876,49 @@ void TorchMLModelDriverImplementation::unitConversion(KIM::ModelDriverCreate *co
                                                       KIM::TemperatureUnit const requestedTemperatureUnit,
                                                       KIM::TimeUnit const requestedTimeUnit,
                                                       int *const ier) {
-    KIM::LengthUnit fromLength = KIM::LENGTH_UNIT::A;
-    KIM::EnergyUnit fromEnergy = KIM::ENERGY_UNIT::eV;
-    KIM::ChargeUnit fromCharge = KIM::CHARGE_UNIT::e;
-    KIM::TemperatureUnit fromTemperature = KIM::TEMPERATURE_UNIT::K;
-    KIM::TimeUnit fromTime = KIM::TIME_UNIT::ps;
-    double convertLength = 1.0;
-    *ier = KIM::ModelDriverCreate::ConvertUnit(fromLength,
-                                               fromEnergy,
-                                               fromCharge,
-                                               fromTemperature,
-                                               fromTime,
-                                               requestedLengthUnit,
-                                               requestedEnergyUnit,
-                                               requestedChargeUnit,
-                                               requestedTemperatureUnit,
-                                               requestedTimeUnit,
-                                               1.0,
-                                               0.0,
-                                               0.0,
-                                               0.0,
-                                               0.0,
-                                               &convertLength);
-
-    if (*ier) {
-        LOG_ERROR("Unable to convert length unit");
+    // KIM::LengthUnit fromLength = KIM::LENGTH_UNIT::A;
+    // KIM::EnergyUnit fromEnergy = KIM::ENERGY_UNIT::eV;
+    // KIM::ChargeUnit fromCharge = KIM::CHARGE_UNIT::e;
+    // KIM::TemperatureUnit fromTemperature = KIM::TEMPERATURE_UNIT::K;
+    // KIM::TimeUnit fromTime = KIM::TIME_UNIT::ps;
+    // double convertLength = 1.0;
+    if (requestedLengthUnit != KIM::LENGTH_UNIT::A) {
+        LOG_ERROR("Only Angstroms supported for length unit");
+        *ier = true;
         return;
     }
+    if (requestedEnergyUnit != KIM::ENERGY_UNIT::eV) {
+        LOG_ERROR("Only eV supported for energy unit");
+        *ier = true;
+        return;
+    }
+    //   *ier = KIM::ModelDriverCreate::ConvertUnit(fromLength,
+    //                                              fromEnergy,
+    //                                              fromCharge,
+    //                                              fromTemperature,
+    //                                              fromTime,
+    //                                              requestedLengthUnit,
+    //                                              requestedEnergyUnit,
+    //                                              requestedChargeUnit,
+    //                                              requestedTemperatureUnit,
+    //                                              requestedTimeUnit,
+    //                                              1.0,
+    //                                              0.0,
+    //                                              0.0,
+    //                                              0.0,
+    //                                              0.0,
+    //                                              &convertLength);
+    //
+    //   if (*ier) {
+    //       LOG_ERROR("Unable to convert length unit");
+    //       return;
+    //   }
 
-    *ier = modelDriverCreate->SetUnits(requestedLengthUnit,
-                                       requestedEnergyUnit,
+    *ier = modelDriverCreate->SetUnits(KIM::LENGTH_UNIT::A,
+                                       KIM::ENERGY_UNIT::eV,
                                        KIM::CHARGE_UNIT::unused,
                                        KIM::TEMPERATURE_UNIT::unused,
-                                       KIM::TIME_UNIT::unused);
+                                       requestedTimeUnit);
 
 }
 

@@ -444,9 +444,7 @@ void TorchMLModelDriverImplementation::setDefaultInputs(const KIM::ModelComputeA
 
     std::vector<int> input_tensor_size({*numberOfParticlesPointer, 3});
 
-
     ml_model->SetInputNode(1, coordinates, input_tensor_size, true);
-
 
     updateNeighborList(modelComputeArguments, n_contributing_atoms);
 
@@ -566,45 +564,52 @@ void TorchMLModelDriverImplementation::setGraphInputs(const KIM::ModelComputeArg
     double _x, _y, _z;
     std::array<double, 3> i_arr = {0.0, 0.0, 0.0}, j_arr = {0.0, 0.0, 0.0};
     int ii = 0;
-    // auto start_time = std::chrono::high_resolution_clock::now();
-    do {
-        std::unordered_set<int> atoms_in_next_layer;
-        for (int atom_i: atoms_in_layers) {
-            modelComputeArguments->GetNeighborList(0, atom_i, &numberOfNeighbors, &neighbors);
-            for (int j = 0; j < numberOfNeighbors; j++) {
-                int atom_j = neighbors[j];
-                std::memcpy(i_arr.data(), coordinates + 3 * atom_i, 3 * sizeof(double));
-                std::memcpy(j_arr.data(), coordinates + 3 * atom_j, 3 * sizeof(double));
-                _x = i_arr[0] - j_arr[0];
-                _y = i_arr[1] - j_arr[1];
-                _z = i_arr[2] - j_arr[2];
-                double r_sq = _x * _x + _y * _y + _z * _z;
-                if (r_sq <= cutoff_sq) {
-                    unrolled_graph[ii].insert({atom_i, atom_j});
-                    if (n_contributing_atoms == 1) unrolled_graph[ii].insert({atom_j, atom_i});
-                    atoms_in_next_layer.insert(atom_j);
+    if (n_contributing_atoms == 1) {
+        do {
+            std::unordered_set<int> atoms_in_next_layer;
+            for (int atom_i: atoms_in_layers) {
+                modelComputeArguments->GetNeighborList(0, atom_i, &numberOfNeighbors, &neighbors);
+                for (int j = 0; j < numberOfNeighbors; j++) {
+                    int atom_j = neighbors[j];
+                    std::memcpy(i_arr.data(), coordinates + 3 * atom_i, 3 * sizeof(double));
+                    std::memcpy(j_arr.data(), coordinates + 3 * atom_j, 3 * sizeof(double));
+                    _x = j_arr[0] - i_arr[0];
+                    _y = j_arr[1] - i_arr[1];
+                    _z = j_arr[2] - i_arr[2];
+                    double r_sq = _x * _x + _y * _y + _z * _z;
+                    if (r_sq <= cutoff_sq) {
+                        unrolled_graph[ii].insert({atom_i, atom_j});
+                        unrolled_graph[ii].insert({atom_j, atom_i});
+                        atoms_in_next_layer.insert(atom_j);
+                    }
                 }
             }
-        }
-        atoms_in_layers = atoms_in_next_layer;
-        ii++;
-    } while (ii < n_layers);
-    // auto end_time = std::chrono::high_resolution_clock::now();
-    // std::cout << "Time taken for graph construction: " << std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time).count() << "\u03BCs" << std::endl;
-
-    // // single particle contributing mitigation
-    // std::cout << "Contributing atoms: " << n_contributing_atoms << std::endl;
-    // if (n_contributing_atoms == 1) {
-    //     for (auto& graph: unrolled_graph) {
-    //         std::cout << "Graph size: " << graph.size() << std::endl;
-    //         const unsigned long int n_edges = graph.size();
-    //         for (unsigned long int atom_pair_i = 0; atom_pair_i < n_edges; atom_pair_i++) {
-    //             auto &atom_pair = *std::next(graph.cbegin(), static_cast<long>(atom_pair_i));
-    //             graph.insert({atom_pair[1], atom_pair[0]});
-    //         }
-    //         std::cout << "Graph size: " << graph.size() << std::endl;
-    //     }
-    // }
+            atoms_in_layers = atoms_in_next_layer;
+            ii++;
+        } while (ii < n_layers);
+    } else {
+        do {
+            std::unordered_set<int> atoms_in_next_layer;
+            for (int atom_i: atoms_in_layers) {
+                modelComputeArguments->GetNeighborList(0, atom_i, &numberOfNeighbors, &neighbors);
+                for (int j = 0; j < numberOfNeighbors; j++) {
+                    int atom_j = neighbors[j];
+                    std::memcpy(i_arr.data(), coordinates + 3 * atom_i, 3 * sizeof(double));
+                    std::memcpy(j_arr.data(), coordinates + 3 * atom_j, 3 * sizeof(double));
+                    _x = j_arr[0] - i_arr[0];
+                    _y = j_arr[1] - i_arr[1];
+                    _z = j_arr[2] - i_arr[2];
+                    double r_sq = _x * _x + _y * _y + _z * _z;
+                    if (r_sq <= cutoff_sq) {
+                        unrolled_graph[ii].insert({atom_i, atom_j});
+                        atoms_in_next_layer.insert(atom_j);
+                    }
+                }
+            }
+            atoms_in_layers = atoms_in_next_layer;
+            ii++;
+        } while (ii < n_layers);
+    }
 
     // Sanitize previous graph
     if (graph_edge_indices) {

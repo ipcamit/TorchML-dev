@@ -32,7 +32,6 @@ TorchMLModelDriverImplementation::TorchMLModelDriverImplementation(
         int *const ier) {
     *ier = false;
     //initialize members to remove warning----
-    std::cout << "USING EXPERIMENTAL DRIVER\n";
     influence_distance = 0.0;
     n_elements = 0;
     ml_model = nullptr;

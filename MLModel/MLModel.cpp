@@ -210,7 +210,6 @@ void PytorchModel::SetInputNode(int model_input_index, int layer,
     torch::Tensor edge_index =
             torch::from_blob(edge_index_array, {2, size}, tensor_options).to(*device_);
     model_inputs_[model_input_index] = edge_index;
-
 }
 
 void PytorchModel::Run(c10::IValue &out_tensor) {

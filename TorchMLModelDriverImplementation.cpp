@@ -32,6 +32,7 @@ TorchMLModelDriverImplementation::TorchMLModelDriverImplementation(
         int *const ier) {
     *ier = false;
     //initialize members to remove warning----
+    std::cout << "EXPERIMENTAL\n";
     influence_distance = 0.0;
     n_elements = 0;
     ml_model = nullptr;
@@ -302,10 +303,12 @@ void TorchMLModelDriverImplementation::postprocessOutputs(c10::IValue &out_tenso
         }
 
         *energy = *(energy_sum_cpu.contiguous().data_ptr<double>());
+        auto input_tensor_accessor = input_tensor.toTensor().to(torch::kCPU).contiguous().data_ptr<double>();
         if (preprocessing == "Descriptor") { // descriptor loop
 #ifdef USE_LIBDESC
             // only do below if forces are needed
             if (forces && input_grad.has_value()) { // forces were requested and model returned valid grad
+                auto input_grad_accessor = input_grad->contiguous().data_ptr<double>();
                 int neigh_from = 0;
                 int n_neigh;
                 int width = descriptor->width;
@@ -330,8 +333,8 @@ void TorchMLModelDriverImplementation::postprocessOutputs(c10::IValue &out_tenso
                                          n_neigh,
                                          coordinates,
                                          force_accessor,
-                                         input_tensor.toTensor().data_ptr<double>() + (contributing_particle_ptr * width),
-                                         input_grad->contiguous().data_ptr<double>() + (contributing_particle_ptr * width),
+                                         input_tensor_accessor + (contributing_particle_ptr * width),
+                                         input_grad_accessor + (contributing_particle_ptr * width),
                                          descriptor);
                     contributing_particle_ptr++;
                 }
@@ -374,7 +377,7 @@ void TorchMLModelDriverImplementation::postprocessOutputs(c10::IValue &out_tenso
     // partial particle energy
     if (expects_partial_energy && partialEnergy && partial_energy_accessor) {
         for (int i = 0; i < *numberOfParticlesPointer; i++) {
-            if (i < n_contributing_atoms) {
+            if (particleContributing[i] == 1) {
                 partialEnergy[i] = partial_energy_accessor[i];
             } else {
                 partialEnergy[i] = 0.0;
@@ -605,52 +608,28 @@ void TorchMLModelDriverImplementation::setGraphInputs(const KIM::ModelComputeArg
     double _x, _y, _z;
     std::array<double, 3> i_arr = {0.0, 0.0, 0.0}, j_arr = {0.0, 0.0, 0.0};
     int ii = 0;
-    if (n_contributing_atoms == 1) {
-        do {
-            std::unordered_set<int> atoms_in_next_layer;
-            for (int atom_i: atoms_in_layers) {
-                modelComputeArguments->GetNeighborList(0, atom_i, &numberOfNeighbors, &neighbors);
-                for (int j = 0; j < numberOfNeighbors; j++) {
-                    int atom_j = neighbors[j];
-                    std::memcpy(i_arr.data(), coordinates + 3 * atom_i, 3 * sizeof(double));
-                    std::memcpy(j_arr.data(), coordinates + 3 * atom_j, 3 * sizeof(double));
-                    _x = j_arr[0] - i_arr[0];
-                    _y = j_arr[1] - i_arr[1];
-                    _z = j_arr[2] - i_arr[2];
-                    double r_sq = _x * _x + _y * _y + _z * _z;
-                    if (r_sq <= cutoff_sq) {
-                        unrolled_graph[ii].insert({atom_i, atom_j});
-                        unrolled_graph[ii].insert({atom_j, atom_i});
-                        atoms_in_next_layer.insert(atom_j);
-                    }
+    do {
+        std::unordered_set<int> atoms_in_next_layer;
+        for (int atom_i: atoms_in_layers) {
+            modelComputeArguments->GetNeighborList(0, atom_i, &numberOfNeighbors, &neighbors);
+            for (int j = 0; j < numberOfNeighbors; j++) {
+                int atom_j = neighbors[j];
+                std::memcpy(i_arr.data(), coordinates + 3 * atom_i, 3 * sizeof(double));
+                std::memcpy(j_arr.data(), coordinates + 3 * atom_j, 3 * sizeof(double));
+                _x = j_arr[0] - i_arr[0];
+                _y = j_arr[1] - i_arr[1];
+                _z = j_arr[2] - i_arr[2];
+                double r_sq = _x * _x + _y * _y + _z * _z;
+                if (r_sq <= cutoff_sq) {
+                    unrolled_graph[ii].insert({atom_i, atom_j});
+                    unrolled_graph[ii].insert({atom_j, atom_i}); //TODO: FIX the symmetric pair thing
+                    atoms_in_next_layer.insert(atom_j);
                 }
             }
-            atoms_in_layers = atoms_in_next_layer;
-            ii++;
-        } while (ii < n_layers);
-    } else {
-        do {
-            std::unordered_set<int> atoms_in_next_layer;
-            for (int atom_i: atoms_in_layers) {
-                modelComputeArguments->GetNeighborList(0, atom_i, &numberOfNeighbors, &neighbors);
-                for (int j = 0; j < numberOfNeighbors; j++) {
-                    int atom_j = neighbors[j];
-                    std::memcpy(i_arr.data(), coordinates + 3 * atom_i, 3 * sizeof(double));
-                    std::memcpy(j_arr.data(), coordinates + 3 * atom_j, 3 * sizeof(double));
-                    _x = j_arr[0] - i_arr[0];
-                    _y = j_arr[1] - i_arr[1];
-                    _z = j_arr[2] - i_arr[2];
-                    double r_sq = _x * _x + _y * _y + _z * _z;
-                    if (r_sq <= cutoff_sq) {
-                        unrolled_graph[ii].insert({atom_i, atom_j});
-                        atoms_in_next_layer.insert(atom_j);
-                    }
-                }
-            }
-            atoms_in_layers = atoms_in_next_layer;
-            ii++;
-        } while (ii < n_layers);
-    }
+        }
+        atoms_in_layers = atoms_in_next_layer;
+        ii++;
+    } while (ii < n_layers);
 
     // Sanitize previous graph
     if (graph_edge_indices) {

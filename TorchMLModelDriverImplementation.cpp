@@ -22,6 +22,15 @@
 #undef KIM_LOGGER_OBJECT_NAME
 #define KIM_LOGGER_OBJECT_NAME modelDriverCreate
 
+
+struct SymmetricPairEqual {
+    bool operator()(const std::array<long,2>& lhs, const std::array<long,2>& rhs) const {
+
+        return (std::min(lhs[0], lhs[1]) == std::min(rhs[0], rhs[1])) &&
+               (std::max(lhs[0], lhs[1]) == std::max(rhs[0], rhs[1]));
+    }
+};
+
 TorchMLModelDriverImplementation::TorchMLModelDriverImplementation(
     KIM::ModelDriverCreate * const modelDriverCreate,
     KIM::LengthUnit const requestedLengthUnit,
@@ -33,7 +42,7 @@ TorchMLModelDriverImplementation::TorchMLModelDriverImplementation(
 {
   *ier = false;
   // initialize members to remove warning----
-  std::cout << "EXPERIMENTAL\n";
+  std::cout << "EXPERIMENTAL 2\n";
   influence_distance = 0.0;
   n_elements = 0;
   ml_model = nullptr;
@@ -707,7 +716,7 @@ void TorchMLModelDriverImplementation::setGraphInputs(
   int const * neighbors;
 
   std::unordered_set<int> atoms_in_layers;
-  std::vector<std::unordered_set<std::array<long, 2>, SymmetricCantorPairing> >
+  std::vector<std::unordered_set<std::array<long, 2>, SymmetricCantorPairing, SymmetricPairEqual>>
       unrolled_graph(n_layers);
 
   for (int i = 0; i < *numberOfParticlesPointer; i++)
@@ -737,8 +746,8 @@ void TorchMLModelDriverImplementation::setGraphInputs(
         if (r_sq <= cutoff_sq)
         {
           unrolled_graph[ii].insert({atom_i, atom_j});
-          unrolled_graph[ii].insert(
-              {atom_j, atom_i});  // TODO: FIX the symmetric pair thing
+          // unrolled_graph[ii].insert(
+          //     {atom_j, atom_i});  // TODO: FIX the symmetric pair thing
           atoms_in_next_layer.insert(atom_j);
         }
       }
@@ -812,7 +821,7 @@ void TorchMLModelDriverImplementation::setGraphInputs(
   {
     ml_model->SetInputNode(2 + i,
                            i,
-                           static_cast<int>(unrolled_graph[i].size()),
+                           static_cast<int>(unrolled_graph[i].size() * 2),
                            graph_edge_indices);
   }
 

@@ -59,18 +59,18 @@ TorchMLModelDriver::TorchMLModelDriver(
     KIM::TimeUnit const requestedTimeUnit,
     int * const ier)
 {
-  implementation_
-      = new TorchMLModelDriverImplementation(modelDriverCreate,
-                                             requestedLengthUnit,
-                                             requestedEnergyUnit,
-                                             requestedChargeUnit,
-                                             requestedTemperatureUnit,
-                                             requestedTimeUnit,
-                                             ier);
+  implementation_ = std::make_unique<TorchMLModelDriverImplementation>(
+                                                      modelDriverCreate,
+                                                      requestedLengthUnit,
+                                                      requestedEnergyUnit,
+                                                      requestedChargeUnit,
+                                                      requestedTemperatureUnit,
+                                                      requestedTimeUnit,
+                                                      ier);
 }
 
 // **************************************************************************
-TorchMLModelDriver::~TorchMLModelDriver() { delete implementation_; }
+TorchMLModelDriver::~TorchMLModelDriver() = default;
 
 //******************************************************************************
 // static member function
@@ -128,4 +128,16 @@ int TorchMLModelDriver::ComputeArgumentsDestroy(
   modelCompute->GetModelBufferPointer(reinterpret_cast<void **>(&modelObject));
   return modelObject->implementation_->ComputeArgumentsDestroy(
       modelComputeArgumentsDestroy);
+}
+
+//******************************************************************************
+// static member function
+int TorchMLModelDriver::WriteParameterizedModel(const KIM::ModelWriteParameterizedModel * const modelWriteParameterizedModel) {
+  TorchMLModelDriver * modelObject;
+
+  modelWriteParameterizedModel->GetModelBufferPointer(
+      reinterpret_cast<void **>(&modelObject));
+
+  return modelObject->implementation_->WriteParameterizedModel(
+      modelWriteParameterizedModel);
 }

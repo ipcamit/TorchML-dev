@@ -2,10 +2,10 @@
 #define MLMODEL_HPP
 
 #include <cstdlib>
-#include <string>
-#include <vector>
 #include <memory>
+#include <string>
 #include <type_traits>
+#include <vector>
 
 #include <torch/csrc/jit/runtime/graph_executor.h>
 #include <torch/script.h>
@@ -32,27 +32,27 @@ torch::Dtype getTorchDtype()
 class MLModel
 {
  public:
-  static MLModel * create(std::string& /*model_file_path*/,
-                          std::string& /*device_name*/,
+  static MLModel * create(std::string & /*model_file_path*/,
+                          std::string & /*device_name*/,
                           int /*model_input_size*/);
 
   virtual void SetInputNode(int /*model_input_index*/,
                             int * /*input*/,
-                            std::vector<std::int64_t>& /*size*/,
+                            std::vector<std::int64_t> & /*size*/,
                             bool /*requires grad*/,
                             bool /* to clone*/)
       = 0;
 
   virtual void SetInputNode(int /*model_input_index*/,
                             std::int64_t * /*input*/,
-                            std::vector<std::int64_t>& /*size*/,
+                            std::vector<std::int64_t> & /*size*/,
                             bool /*requires grad*/,
                             bool /* to clone*/)
       = 0;
 
   virtual void SetInputNode(int /*model_input_index*/,
                             double * /*input*/,
-                            std::vector<std::int64_t>& /*size*/,
+                            std::vector<std::int64_t> & /*size*/,
                             bool /*requires grad*/,
                             bool /* to clone*/)
       = 0;
@@ -60,8 +60,9 @@ class MLModel
 
   virtual void Run(double *, double *, double *, bool) = 0;
 
+  virtual void WriteMLModel(std::string & /*model_path*/) = 0;
+
   virtual ~MLModel() = default;
-  bool return_forces;
 };
 
 // Concrete MLModel corresponding to pytorch
@@ -72,7 +73,8 @@ class PytorchModel : public MLModel
   std::vector<torch::jit::IValue> model_inputs_;
   std::unique_ptr<torch::Device> device_;
 
-  void SetExecutionDevice(std::string& /*device_name*/);
+  void SetExecutionDevice(std::string & /*device_name*/);
+  int grad_idx;
 
   template<typename T>
   void SetInputNodeTemplate(int idx,
@@ -89,55 +91,56 @@ class PytorchModel : public MLModel
     // Create tensor from blob
     torch::Tensor input_tensor = torch::from_blob(data, shape, options);
 
-    // Only need clone if device is CPU, else implicit deep copy will be triggered
+    // Only need clone if device is CPU, else implicit deep copy will be
+    // triggered
     if (clone && (*device_ == torch::kCPU)) input_tensor = input_tensor.clone();
 
     // explicit copy to device if not done already
-    if (input_tensor.device() != *device_) input_tensor = input_tensor.to(*device_);
+    if (input_tensor.device() != *device_)
+      input_tensor = input_tensor.to(*device_);
 
     // Workaround for PyTorch bug
-    if (requires_grad) input_tensor.retain_grad();
+    if (requires_grad)
+    {
+      input_tensor.retain_grad();
+      grad_idx = idx;
+    }
 
     model_inputs_[idx] = input_tensor;
   }
-
-  // template<bool valid_energy_ptr,
-  //          bool valid_energy_partial_ptr,
-  //          bool valid_forces_ptr>
-  // void assign_energy_forces(torch::IValue output, double * energy_ptr, double * energy_partial_ptr, double * forces_ptr){
-  //
-  // }
 
 
  public:
   std::string model_file_path_;
 
-  PytorchModel(std::string& /*model_file_path*/,
-               std::string& /*device_name*/,
+  PytorchModel(std::string & /*model_file_path*/,
+               std::string & /*device_name*/,
                int /*input size*/);
 
   void SetInputNode(int /*model_input_index*/,
                     int * /*input*/,
-                    std::vector<std::int64_t>& /*size*/,
+                    std::vector<std::int64_t> & /*size*/,
                     bool /*requires grad*/,
                     bool /*to clone or not*/) override;
 
   void SetInputNode(int /*model_input_index*/,
-                    int64_t * /*input*/,
-                    std::vector<std::int64_t>& /*size*/,
+                    std::int64_t * /*input*/,
+                    std::vector<std::int64_t> & /*size*/,
                     bool /*requires grad*/,
                     bool /*to clone or not*/) override;
 
   void SetInputNode(int /*model_input_index*/,
                     double * /*input*/,
-                    std::vector<std::int64_t>& /*size*/,
+                    std::vector<std::int64_t> & /*size*/,
                     bool /*requires grad*/,
                     bool /*to clone or not*/) override;
 
+  void Run(double * /*energy*/,
+           double * /*partial_energy*/,
+           double * /*forces*/,
+           bool /*backprop*/) override;
 
-  void SetInputSize(int /*input size*/);
-
-  void Run(double * /*energy*/, double * /*partial_energy*/, double * /*forces*/, bool /*backprop*/) override;
+  void WriteMLModel(std::string & /*path*/) override;
 
   ~PytorchModel() override = default;
 };

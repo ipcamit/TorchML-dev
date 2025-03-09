@@ -7,16 +7,12 @@
 
 #include "KIM_ModelDriverHeaders.hpp"
 #include "MLModel.hpp"
+#include <memory>
 #include <torch/torch.h>
+
 
 #ifdef USE_LIBDESC
 #include "Descriptors.hpp"
-
-// TODO TEMP WORKAROUND TILL ENZYME FIXES BUG OR I SHIFT TO CLAD etc
-// SEE DESTRUCTOR FOR MORE DETAILS
-// #include "SymmetryFunctions.hpp"
-// #include "Bispectrum.hpp"
-// --------------------------------------------
 
 using namespace Descriptor;
 #endif
@@ -33,6 +29,8 @@ class TorchMLModelDriverImplementation
   bool returns_forces;
   std::string descriptor_name = "None";
   std::string descriptor_param_file = "None";
+  std::string descriptor_param_file_content;
+  std::string fully_qualified_model_name;
 
   TorchMLModelDriverImplementation(
       KIM::ModelDriverCreate * modelDriverCreate,
@@ -56,26 +54,28 @@ class TorchMLModelDriverImplementation
   int ComputeArgumentsDestroy(
       KIM::ModelComputeArgumentsDestroy * modelComputeArgumentsDestroy);
 
+  int WriteParameterizedModel(KIM::ModelWriteParameterizedModel const * const modelWriteParameterizedModel) const;
+
  private:
   // Derived or assigned variables are private
   int modelWillNotRequestNeighborsOfNoncontributingParticles_;
   int n_contributing_atoms;
   int number_of_inputs;
-  int64_t * species_atomic_number;
-  int64_t * contraction_array;
+  std::vector<std::int64_t> species_atomic_number;
+  std::vector<std::int64_t> contraction_array;
 
-  MLModel * ml_model;
+  std::unique_ptr<MLModel> ml_model;
 
 #ifdef USE_LIBDESC
   AvailableDescriptor descriptor_kind;
-  DescriptorKind * descriptor;
+  std::unique_ptr<DescriptorKind> descriptor;
 #endif
   std::vector<int> num_neighbors_;
   std::vector<int> neighbor_list;
   std::vector<int> z_map;
 
-  double * descriptor_array;
-  long ** graph_edge_indices;
+  std::vector<double> descriptor_array;
+  std::vector<std::vector<std::int64_t>> graph_edge_indices;
 
   void
   updateNeighborList(KIM::ModelComputeArguments const * modelComputeArguments,
@@ -91,6 +91,7 @@ class TorchMLModelDriverImplementation
 
   void readParametersFile(KIM::ModelDriverCreate * modelDriverCreate,
                           int * ier);
+
 
   static void unitConversion(KIM::ModelDriverCreate * modelDriverCreate,
                              KIM::LengthUnit requestedLengthUnit,
@@ -109,15 +110,15 @@ class TorchMLModelDriverImplementation
   void
   preprocessInputs(KIM::ModelComputeArguments const * modelComputeArguments);
 
-  void postprocessOutputs(c10::IValue &, KIM::ModelComputeArguments const *);
+  void postprocessOutputs(KIM::ModelComputeArguments const *);
 
   void Run(KIM::ModelComputeArguments const * modelComputeArguments);
 
   void contributingAtomCounts(
       KIM::ModelComputeArguments const * modelComputeArguments);
-
-  void graphSetToGraphArray(std::vector<std::set<std::tuple<long, long> > > &);
-  // TorchMLModelImplementation * implementation_;
+  //
+  // void graphSetToGraphArray(std::vector<std::set<std::tuple<long, long> > > &);
+  // // TorchMLModelImplementation * implementation_;
 };
 
 int sym_to_z(std::string &);
@@ -136,6 +137,14 @@ class SymmetricCantorPairing
 
     return ((ksum * ksum - ksum % 2) + kmin) / 4;
   }
+};
+
+struct SymmetricPairEqual {
+    bool operator()(const std::array<long,2>& lhs, const std::array<long,2>& rhs) const {
+
+        return (std::min(lhs[0], lhs[1]) == std::min(rhs[0], rhs[1])) &&
+               (std::max(lhs[0], lhs[1]) == std::max(rhs[0], rhs[1]));
+    }
 };
 
 #endif  // TORCH_ML_MODEL_DRIVER_IMPLEMENTATION_HPP

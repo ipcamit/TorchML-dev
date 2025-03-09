@@ -1,6 +1,5 @@
 #include "MLModel.hpp"
 #include <iostream>
-#include <map>
 #include <stdexcept>
 #include <string>
 
@@ -12,14 +11,14 @@
 
 #include <torch/script.h>
 
-MLModel * MLModel::create(std::string& model_file_path,
-                          std::string& device_name,
+MLModel * MLModel::create(std::string & model_file_path,
+                          std::string & device_name,
                           const int model_input_size)
 {
-    return new PytorchModel(model_file_path, device_name, model_input_size);
+  return new PytorchModel(model_file_path, device_name, model_input_size);
 }
 
-void PytorchModel::SetExecutionDevice(std::string& device_name)
+void PytorchModel::SetExecutionDevice(std::string & device_name)
 {
   // Use the requested device name char array to create a torch Device
   // object.  Generally, the ``device_name`` parameter is going to come
@@ -94,17 +93,62 @@ void PytorchModel::SetExecutionDevice(std::string& device_name)
 }
 
 
-
-void PytorchModel::Run(double * energy, double * partial_energy, double * forces, bool backprop)
+void PytorchModel::Run(double * energy,
+                       double * partial_energy,
+                       double * forces,
+                       bool backprop)
 {
+  // Energy is a required property for both energy and forces
   auto out_tensor = module_.forward(model_inputs_).toTuple()->elements();
+  auto partial_energy_tensor = out_tensor[0].toTensor();
+  auto energy_tensor = partial_energy_tensor.sum();
+  c10::optional<torch::Tensor> forces_tensor = torch::nullopt;
 
+  if (backprop && forces)
+  {
+    // need backprop for forces
+    energy_tensor.backward();
+    forces_tensor = -model_inputs_[grad_idx].toTensor().grad().to(torch::kCPU);
+    std::memcpy(forces,
+                forces_tensor->contiguous().data_ptr<double>(),
+                forces_tensor->numel());
+  }
+  else if (!backprop && forces && out_tensor.size() == 2)
+  {
+    // model provides forces
+    forces_tensor = out_tensor[1].toTensor().to(torch::kCPU);
+    std::memcpy(forces,
+                forces_tensor->contiguous().data_ptr<double>(),
+                forces_tensor->numel());
+  }
+  else if (!backprop && forces && out_tensor.size() < 2)
+  {
+    throw std::runtime_error("Requested forces, but neither model provides "
+                             "forces nor backpropagation was requested");
+  }
 
+  // assign everything
+  if (energy) { *energy = *(energy_tensor.to(torch::kCPU).data_ptr<double>()); }
 
+  if (partial_energy)
+  {
+    if (partial_energy_tensor.sizes().size() > 0)
+    {
+      std::memcpy(
+          partial_energy,
+          partial_energy_tensor.to(torch::kCPU).contiguous().data_ptr<double>(),
+          partial_energy_tensor.numel());
+    }
+    else
+    {
+      throw std::runtime_error(
+          "Requested partial energy, but the model does not provide it\n");
+    }
+  }
 }
 
-PytorchModel::PytorchModel(std::string& model_file_path,
-                           std::string& device_name,
+PytorchModel::PytorchModel(std::string & model_file_path,
+                           std::string & device_name,
                            const int size_)
 {
   model_file_path_ = model_file_path;
@@ -143,17 +187,31 @@ PytorchModel::PytorchModel(std::string& model_file_path,
 }
 
 
-void PytorchModel::SetInputSize(int size) { model_inputs_.resize(size); }
+void PytorchModel::SetInputNode(int idx,
+                                int * const data,
+                                std::vector<std::int64_t> & size,
+                                bool requires_grad,
+                                bool clone)
+{
+  SetInputNodeTemplate(idx, data, size, requires_grad, clone);
+}
+void PytorchModel::SetInputNode(int idx,
+                                std::int64_t * const data,
+                                std::vector<std::int64_t> & size,
+                                bool requires_grad,
+                                bool clone)
+{
+  SetInputNodeTemplate(idx, data, size, requires_grad, clone);
+}
+void PytorchModel::SetInputNode(int idx,
+                                double * const data,
+                                std::vector<std::int64_t> & size,
+                                bool requires_grad,
+                                bool clone)
+{
+  SetInputNodeTemplate(idx, data, size, requires_grad, clone);
+}
 
-void PytorchModel::SetInputNode( int idx, int * const data, std::vector<std::int64_t> & size, bool requires_grad, bool clone)
-{
-  SetInputNodeTemplate(idx, data, size, requires_grad, clone);
-}
-void PytorchModel::SetInputNode( int idx, int64_t * const data, std::vector<std::int64_t> & size, bool requires_grad, bool clone)
-{
-  SetInputNodeTemplate(idx, data, size, requires_grad, clone);
-}
-void PytorchModel::SetInputNode( int idx, double * const data, std::vector<std::int64_t> & size, bool requires_grad, bool clone)
-{
-  SetInputNodeTemplate(idx, data, size, requires_grad, clone);
+void PytorchModel::WriteMLModel(std::string & model_path) {
+  module_.save(model_path);
 }

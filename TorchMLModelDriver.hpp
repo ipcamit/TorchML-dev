@@ -2,6 +2,7 @@
 #define TORCH_ML_MODEL_DRIVER_HPP
 
 #include "KIM_ModelDriverHeaders.hpp"
+#include <memory>
 
 extern "C" {
 int model_driver_create(KIM::ModelDriverCreate * modelDriverCreate,
@@ -49,11 +50,14 @@ class TorchMLModelDriver
       KIM::ModelCompute const * modelCompute,
       KIM::ModelComputeArgumentsDestroy * modelComputeArgumentsDestroy);
 
+  static int WriteParameterizedModel(KIM::ModelWriteParameterizedModel const * const
+                              modelWriteParameterizedModel);
+
   ~TorchMLModelDriver();
 
  private:
   //! Pointer to ML model driver implementation
-  TorchMLModelDriverImplementation * implementation_;
+  std::unique_ptr<TorchMLModelDriverImplementation> implementation_;
 };
 
 #endif

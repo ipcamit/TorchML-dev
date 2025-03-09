@@ -77,7 +77,7 @@ find_package(KIM-API-ITEMS 2.2 REQUIRED CONFIG)
 
 # KIM-API setup --------------------------------------------------
 kim_api_items_setup_before_project(ITEM_TYPE "modelDriver")
-project(TorchML__MD_000000000000_000 LANGUAGES CXX)
+project(TorchML__MD_173118614730_001 LANGUAGES CXX)
 kim_api_items_setup_after_project(ITEM_TYPE "modelDriver")
 
 # Find Torch (env TORCH_ROOT) and Torch Geometric dependencies
@@ -138,6 +138,8 @@ if (DEFINED ENV{KIM_MODEL_MPI_AWARE})
         endif()
     endif()
 endif()
+
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
 
 SET(CMAKE_SKIP_BUILD_RPATH  FALSE)
 

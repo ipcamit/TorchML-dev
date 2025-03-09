@@ -59,14 +59,15 @@ TorchMLModelDriver::TorchMLModelDriver(
     KIM::TimeUnit const requestedTimeUnit,
     int * const ier)
 {
+  std::cout << "Initializing the model" << std::endl;
   implementation_ = std::make_unique<TorchMLModelDriverImplementation>(
-                                                      modelDriverCreate,
-                                                      requestedLengthUnit,
-                                                      requestedEnergyUnit,
-                                                      requestedChargeUnit,
-                                                      requestedTemperatureUnit,
-                                                      requestedTimeUnit,
-                                                      ier);
+      modelDriverCreate,
+      requestedLengthUnit,
+      requestedEnergyUnit,
+      requestedChargeUnit,
+      requestedTemperatureUnit,
+      requestedTimeUnit,
+      ier);
 }
 
 // **************************************************************************
@@ -132,7 +133,10 @@ int TorchMLModelDriver::ComputeArgumentsDestroy(
 
 //******************************************************************************
 // static member function
-int TorchMLModelDriver::WriteParameterizedModel(const KIM::ModelWriteParameterizedModel * const modelWriteParameterizedModel) {
+int TorchMLModelDriver::WriteParameterizedModel(
+    const KIM::ModelWriteParameterizedModel * const
+        modelWriteParameterizedModel)
+{
   TorchMLModelDriver * modelObject;
 
   modelWriteParameterizedModel->GetModelBufferPointer(

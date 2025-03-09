@@ -50,7 +50,8 @@ class TorchMLModelDriver
       KIM::ModelCompute const * modelCompute,
       KIM::ModelComputeArgumentsDestroy * modelComputeArgumentsDestroy);
 
-  static int WriteParameterizedModel(KIM::ModelWriteParameterizedModel const * const
+  static int
+  WriteParameterizedModel(KIM::ModelWriteParameterizedModel const *
                               modelWriteParameterizedModel);
 
   ~TorchMLModelDriver();

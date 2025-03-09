@@ -8,7 +8,6 @@
 #include "KIM_ModelDriverHeaders.hpp"
 #include "MLModel.hpp"
 #include <memory>
-#include <torch/torch.h>
 
 
 #ifdef USE_LIBDESC
@@ -54,7 +53,8 @@ class TorchMLModelDriverImplementation
   int ComputeArgumentsDestroy(
       KIM::ModelComputeArgumentsDestroy * modelComputeArgumentsDestroy);
 
-  int WriteParameterizedModel(KIM::ModelWriteParameterizedModel const * const modelWriteParameterizedModel) const;
+  int WriteParameterizedModel(KIM::ModelWriteParameterizedModel const * const
+                                  modelWriteParameterizedModel) const;
 
  private:
   // Derived or assigned variables are private
@@ -75,7 +75,7 @@ class TorchMLModelDriverImplementation
   std::vector<int> z_map;
 
   std::vector<double> descriptor_array;
-  std::vector<std::vector<std::int64_t>> graph_edge_indices;
+  std::vector<std::vector<std::int64_t> > graph_edge_indices;
 
   void
   updateNeighborList(KIM::ModelComputeArguments const * modelComputeArguments,
@@ -116,15 +116,27 @@ class TorchMLModelDriverImplementation
 
   void contributingAtomCounts(
       KIM::ModelComputeArguments const * modelComputeArguments);
-  //
-  // void graphSetToGraphArray(std::vector<std::set<std::tuple<long, long> > > &);
-  // // TorchMLModelImplementation * implementation_;
 };
 
 int sym_to_z(std::string &);
 
 // For hashing unordered_set of pairs
 // https://arxiv.org/pdf/2105.10752.pdf
+// It seems like this might not be the best approach for hashing edges
+// But surprisingly it is.
+
+// === Benchmarking (micro s) ===
+// N_edgs	 Mrgsrt(arr)	Cantor*	 BoostHash	32bitPackHash	Cantor,bidirectional
+// 10^1	   13	          7	       1	        2	            7
+// 10^2	   14	          22       25         30            31
+// 10^3    272          158      177        195           315
+// 10^4    13222        1308     1511       1595          2498
+// 10^5    1347793      25009    30921      28328         46013
+// 10^6    142392300    422934   489779     466556        548133
+// * current method
+// Most likely FMAs kinda instructions make CantorPairs on par with bitwise
+// hashes
+//
 class SymmetricCantorPairing
 {
  public:
@@ -139,12 +151,14 @@ class SymmetricCantorPairing
   }
 };
 
-struct SymmetricPairEqual {
-    bool operator()(const std::array<long,2>& lhs, const std::array<long,2>& rhs) const {
-
-        return (std::min(lhs[0], lhs[1]) == std::min(rhs[0], rhs[1])) &&
-               (std::max(lhs[0], lhs[1]) == std::max(rhs[0], rhs[1]));
-    }
+struct SymmetricPairEqual
+{
+  bool operator()(const std::array<long, 2> & lhs,
+                  const std::array<long, 2> & rhs) const
+  {
+    return (std::min(lhs[0], lhs[1]) == std::min(rhs[0], rhs[1]))
+           && (std::max(lhs[0], lhs[1]) == std::max(rhs[0], rhs[1]));
+  }
 };
 
 #endif  // TORCH_ML_MODEL_DRIVER_IMPLEMENTATION_HPP

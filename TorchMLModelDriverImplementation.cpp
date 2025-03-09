@@ -29,6 +29,7 @@ TorchMLModelDriverImplementation::TorchMLModelDriverImplementation(
 {
   *ier = false;
   // initialize members to remove warning----
+  std::cout << "EXPERIMENTAL DRIVER v001";
   influence_distance = 0.0;
   n_elements = 0;
   ml_model = nullptr;
@@ -37,7 +38,9 @@ TorchMLModelDriverImplementation::TorchMLModelDriverImplementation(
   n_layers = 0;
   n_contributing_atoms = 0;
   number_of_inputs = 0;
-  auto device = std::string {std::getenv("KIM_MODEL_EXECUTION_DEVICE")};
+  auto exec_device = std::getenv("KIM_MODEL_EXECUTION_DEVICE");
+  auto device = exec_device? std::string{exec_device}:std::string{"cpu"};
+
   // Read parameter files from model driver
   // --------------------------------------- also initialize the ml_model
   readParametersFile(modelDriverCreate, ier);
@@ -1141,97 +1144,23 @@ TorchMLModelDriverImplementation::~TorchMLModelDriverImplementation() = default;
 int sym_to_z(std::string & sym)
 {
   // TODO more idiomatic handling of species. Ask Ryan
-  if (sym == "H") return 1;
-  if (sym == "He") return 2;
-  if (sym == "Li") return 3;
-  if (sym == "Be") return 4;
-  if (sym == "B") return 5;
-  if (sym == "C") return 6;
-  if (sym == "N") return 7;
-  if (sym == "O") return 8;
-  if (sym == "F") return 9;
-  if (sym == "Ne") return 10;
-  if (sym == "Na") return 11;
-  if (sym == "Mg") return 12;
-  if (sym == "Al") return 13;
-  if (sym == "Si") return 14;
-  if (sym == "P") return 15;
-  if (sym == "S") return 16;
-  if (sym == "Cl") return 17;
-  if (sym == "A") return 18;
-  if (sym == "K") return 19;
-  if (sym == "Ca") return 20;
-  if (sym == "Sc") return 21;
-  if (sym == "Ti") return 22;
-  if (sym == "V") return 23;
-  if (sym == "Cr") return 24;
-  if (sym == "Mn") return 25;
-  if (sym == "Fe") return 26;
-  if (sym == "Co") return 27;
-  if (sym == "Ni") return 28;
-  if (sym == "Cu") return 29;
-  if (sym == "Zn") return 30;
-  if (sym == "Ga") return 31;
-  if (sym == "Ge") return 32;
-  if (sym == "As") return 33;
-  if (sym == "Se") return 34;
-  if (sym == "Br") return 35;
-  if (sym == "Kr") return 36;
-  if (sym == "Rb") return 37;
-  if (sym == "Sr") return 38;
-  if (sym == "Y") return 39;
-  if (sym == "Zr") return 40;
-  if (sym == "Nb") return 41;
-  if (sym == "Mo") return 42;
-  if (sym == "Tc") return 43;
-  if (sym == "Ru") return 44;
-  if (sym == "Rh") return 45;
-  if (sym == "Pd") return 46;
-  if (sym == "Ag") return 47;
-  if (sym == "Cd") return 48;
-  if (sym == "In") return 49;
-  if (sym == "Sn") return 50;
-  if (sym == "Sb") return 51;
-  if (sym == "Te") return 52;
-  if (sym == "I") return 53;
-  if (sym == "Xe") return 54;
-  if (sym == "Cs") return 55;
-  if (sym == "Ba") return 56;
-  if (sym == "La") return 57;
-  if (sym == "Ce") return 58;
-  if (sym == "Pr") return 59;
-  if (sym == "Nd") return 60;
-  if (sym == "Pm") return 61;
-  if (sym == "Sm") return 62;
-  if (sym == "Eu") return 63;
-  if (sym == "Gd") return 64;
-  if (sym == "Tb") return 65;
-  if (sym == "Dy") return 66;
-  if (sym == "Ho") return 67;
-  if (sym == "Er") return 68;
-  if (sym == "Tm") return 69;
-  if (sym == "Yb") return 70;
-  if (sym == "Lu") return 71;
-  if (sym == "Hf") return 72;
-  if (sym == "Ta") return 73;
-  if (sym == "W") return 74;
-  if (sym == "Re") return 75;
-  if (sym == "Os") return 76;
-  if (sym == "Ir") return 77;
-  if (sym == "Pt") return 78;
-  if (sym == "Au") return 79;
-  if (sym == "Hg") return 80;
-  if (sym == "Ti") return 81;
-  if (sym == "Pb") return 82;
-  if (sym == "Bi") return 83;
-  if (sym == "Po") return 84;
-  if (sym == "At") return 85;
-  if (sym == "Rn") return 86;
-  if (sym == "Fr") return 87;
-  if (sym == "Ra") return 88;
-  if (sym == "Ac") return 89;
-  if (sym == "Th") return 90;
-  if (sym == "Pa") return 91;
-  if (sym == "U") return 92;
-  return -1;
+  static const std::unordered_map<std::string, int> element_map
+      = {{"H", 1},   {"He", 2},  {"Li", 3},  {"Be", 4},  {"B", 5},   {"C", 6},
+         {"N", 7},   {"O", 8},   {"F", 9},   {"Ne", 10}, {"Na", 11}, {"Mg", 12},
+         {"Al", 13}, {"Si", 14}, {"P", 15},  {"S", 16},  {"Cl", 17}, {"A", 18},
+         {"K", 19},  {"Ca", 20}, {"Sc", 21}, {"Ti", 22}, {"V", 23},  {"Cr", 24},
+         {"Mn", 25}, {"Fe", 26}, {"Co", 27}, {"Ni", 28}, {"Cu", 29}, {"Zn", 30},
+         {"Ga", 31}, {"Ge", 32}, {"As", 33}, {"Se", 34}, {"Br", 35}, {"Kr", 36},
+         {"Rb", 37}, {"Sr", 38}, {"Y", 39},  {"Zr", 40}, {"Nb", 41}, {"Mo", 42},
+         {"Tc", 43}, {"Ru", 44}, {"Rh", 45}, {"Pd", 46}, {"Ag", 47}, {"Cd", 48},
+         {"In", 49}, {"Sn", 50}, {"Sb", 51}, {"Te", 52}, {"I", 53},  {"Xe", 54},
+         {"Cs", 55}, {"Ba", 56}, {"La", 57}, {"Ce", 58}, {"Pr", 59}, {"Nd", 60},
+         {"Pm", 61}, {"Sm", 62}, {"Eu", 63}, {"Gd", 64}, {"Tb", 65}, {"Dy", 66},
+         {"Ho", 67}, {"Er", 68}, {"Tm", 69}, {"Yb", 70}, {"Lu", 71}, {"Hf", 72},
+         {"Ta", 73}, {"W", 74},  {"Re", 75}, {"Os", 76}, {"Ir", 77}, {"Pt", 78},
+         {"Au", 79}, {"Hg", 80}, {"Ti", 81}, {"Pb", 82}, {"Bi", 83}, {"Po", 84},
+         {"At", 85}, {"Rn", 86}, {"Fr", 87}, {"Ra", 88}, {"Ac", 89}, {"Th", 90},
+         {"Pa", 91}, {"U", 92}};
+  auto it = element_map.find(sym);
+  return (it != element_map.end()) ? it->second : -1;
 }

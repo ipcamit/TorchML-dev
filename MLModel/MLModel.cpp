@@ -212,6 +212,7 @@ void PytorchModel::SetInputNode(int idx,
   SetInputNodeTemplate(idx, data, size, requires_grad, clone);
 }
 
-void PytorchModel::WriteMLModel(std::string & model_path) {
+void PytorchModel::WriteMLModel(std::string & model_path)
+{
   module_.save(model_path);
 }

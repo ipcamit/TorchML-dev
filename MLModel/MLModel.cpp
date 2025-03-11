@@ -111,7 +111,7 @@ void PytorchModel::Run(double * energy,
     forces_tensor = -model_inputs_[grad_idx].toTensor().grad().to(torch::kCPU);
     std::memcpy(forces,
                 forces_tensor->contiguous().data_ptr<double>(),
-                forces_tensor->numel());
+                forces_tensor->numel() * sizeof(double));
   }
   else if (!backprop && forces && out_tensor.size() == 2)
   {
@@ -119,7 +119,7 @@ void PytorchModel::Run(double * energy,
     forces_tensor = out_tensor[1].toTensor().to(torch::kCPU);
     std::memcpy(forces,
                 forces_tensor->contiguous().data_ptr<double>(),
-                forces_tensor->numel());
+                forces_tensor->numel() * sizeof(double));
   }
   else if (!backprop && forces && out_tensor.size() < 2)
   {
@@ -137,7 +137,7 @@ void PytorchModel::Run(double * energy,
       std::memcpy(
           partial_energy,
           partial_energy_tensor.to(torch::kCPU).contiguous().data_ptr<double>(),
-          partial_energy_tensor.numel());
+          partial_energy_tensor.numel() * sizeof(double));
     }
     else
     {

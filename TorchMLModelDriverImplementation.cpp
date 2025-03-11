@@ -353,7 +353,7 @@ void TorchMLModelDriverImplementation::postprocessOutputs(
       }
       // neg_dE_dzeta = -dE/dzeta, therefore forces = neg_d_desc * dzeta/dr, no
       // negation needed now
-      std::memcpy(forces, force_accessor.get(), *numberOfParticlesPointer * 3);
+      std::memcpy(forces, force_accessor.get(), *numberOfParticlesPointer * 3 * sizeof(double));
     }
     else if (forces && !neg_dE_dzeta)
     {
@@ -584,9 +584,7 @@ void TorchMLModelDriverImplementation::setGraphInputs(
   int const * neighbors;
 
   std::unordered_set<int> atoms_in_layers;
-  std::vector<std::unordered_set<std::array<std::int64_t, 2>,
-                                 SymmetricCantorPairing,
-                                 SymmetricPairEqual> >
+  std::vector<std::unordered_set<std::array<std::int64_t, 2>,CantorPairing>>
       staged_graph(n_layers);
 
   for (int i = 0; i < *numberOfParticlesPointer; i++)
@@ -626,6 +624,7 @@ void TorchMLModelDriverImplementation::setGraphInputs(
         if (r_sq <= cutoff_sq)
         {
           staged_graph[i_layer].insert({atom_i, atom_j});
+          staged_graph[i_layer].insert({atom_j, atom_i});
           atoms_in_next_layer.insert(atom_j);
         }
       }
@@ -641,20 +640,14 @@ void TorchMLModelDriverImplementation::setGraphInputs(
     int jj = 0;
     auto single_graph_size = edge_index_set.size();
     // Sanitize previous graph
-    graph_edge_indices[i_layer].assign(single_graph_size * 4, -1);
+    graph_edge_indices[i_layer].assign(single_graph_size * 2, -1);
     for (auto & bond_pair : edge_index_set)
     {
       graph_edge_indices[i_layer][jj] = std::get<0>(bond_pair);
-      graph_edge_indices[i_layer][jj + 2 * single_graph_size]
+      graph_edge_indices[i_layer][jj + single_graph_size]
           = std::get<1>(bond_pair);
       jj++;
     }
-    std::memcpy(graph_edge_indices[i_layer].data() + single_graph_size,
-                graph_edge_indices[i_layer].data() + 2 * single_graph_size,
-                single_graph_size * sizeof(std::int64_t));
-    std::memcpy(graph_edge_indices[i_layer].data() + 3 * single_graph_size,
-                graph_edge_indices[i_layer].data(),
-                single_graph_size * sizeof(std::int64_t));
     i_layer++;
   }
 

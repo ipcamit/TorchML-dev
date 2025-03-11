@@ -137,28 +137,22 @@ int sym_to_z(std::string &);
 // Most likely FMAs kinda instructions make CantorPairs on par with bitwise
 // hashes
 //
-class SymmetricCantorPairing
+class CantorPairing
 {
  public:
   int64_t operator()(const std::array<long, 2> & t) const
   {
     int64_t k1 = t[0];
     int64_t k2 = t[1];
-    int64_t kmin = std::min(k1, k2);
-    int64_t ksum = k1 + k2 + 1;
-
-    return ((ksum * ksum - ksum % 2) + kmin) / 4;
+    // int64_t kmin = std::min(k1, k2);
+    // int64_t ksum = k1 + k2 + 1;
+    //
+    // return ((ksum * ksum - ksum % 2) + kmin) / 4;
+    int64_t sum = k1 + k2;
+    int64_t triangleNumber = sum * (sum + 1) /2;
+    return triangleNumber + k2;
   }
 };
 
-struct SymmetricPairEqual
-{
-  bool operator()(const std::array<long, 2> & lhs,
-                  const std::array<long, 2> & rhs) const
-  {
-    return (std::min(lhs[0], lhs[1]) == std::min(rhs[0], rhs[1]))
-           && (std::max(lhs[0], lhs[1]) == std::max(rhs[0], rhs[1]));
-  }
-};
 
 #endif  // TORCH_ML_MODEL_DRIVER_IMPLEMENTATION_HPP

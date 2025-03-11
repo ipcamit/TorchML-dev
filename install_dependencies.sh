@@ -160,9 +160,9 @@ if [[ -z "${TorchScatter_ROOT}" ]]; then
     make install DESTDIR="${current_dir}/pytorch_scatter/install" || exit
     # Add TorchScatter to path
     TorchScatter_ROOT="${current_dir}"/pytorch_scatter/install
-    TorchScatter_LIB="${current_dir}"/pytorch_scatter/install/lib
+    TorchScatter_LIB="${current_dir}"/pytorch_scatter/install/lib64
     TorchScatter_INCLUDE="${current_dir}"/pytorch_scatter/install/include
-    TorchScatter_DIR="${current_dir}"/pytorch_scatter/install/lib/cmake
+    TorchScatter_DIR="${current_dir}"/pytorch_scatter/install/share/cmake
 
     cd ${current_dir} || exit
 
@@ -193,9 +193,9 @@ if [[ -z "${TorchSparse_ROOT}" ]]; then
     make install DESTDIR="${current_dir}/pytorch_sparse/install" || exit
     # Add TorchSparse to path
     TorchSparse_ROOT="${current_dir}"/pytorch_sparse/install
-    TorchSparse_LIB="${current_dir}"/pytorch_sparse/install/lib
+    TorchSparse_LIB="${current_dir}"/pytorch_sparse/install/lib64
     TorchSparse_INCLUDE="${current_dir}"/pytorch_sparse/install/include
-    TorchSparse_DIR="${current_dir}"/pytorch_sparse/install/lib/cmake
+    TorchSparse_DIR="${current_dir}"/pytorch_sparse/install/share/cmake
 
     cd ${current_dir} || exit
 

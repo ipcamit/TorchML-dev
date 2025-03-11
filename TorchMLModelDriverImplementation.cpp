@@ -29,7 +29,7 @@ TorchMLModelDriverImplementation::TorchMLModelDriverImplementation(
 {
   *ier = false;
   // initialize members to remove warning----
-  std::cout << "EXPERIMENTAL DRIVER v001";
+  std::cout << "\nEXPERIMENTAL DRIVER v001_\n";
   influence_distance = 0.0;
   n_elements = 0;
   ml_model = nullptr;
@@ -39,7 +39,7 @@ TorchMLModelDriverImplementation::TorchMLModelDriverImplementation(
   n_contributing_atoms = 0;
   number_of_inputs = 0;
   auto exec_device = std::getenv("KIM_MODEL_EXECUTION_DEVICE");
-  auto device = exec_device? std::string{exec_device}:std::string{"cpu"};
+  auto device = exec_device ? std::string {exec_device} : std::string {"cpu"};
 
   // Read parameter files from model driver
   // --------------------------------------- also initialize the ml_model
@@ -66,7 +66,7 @@ TorchMLModelDriverImplementation::TorchMLModelDriverImplementation(
 
   // Set Influence distance
   // ---------------------------------------------------------
-  if (preprocessing == "Graph")
+  if (preprocessing == "graph")
   {
 #ifndef DISABLE_GRAPH
     modelWillNotRequestNeighborsOfNoncontributingParticles_
@@ -125,7 +125,7 @@ TorchMLModelDriverImplementation::TorchMLModelDriverImplementation(
 
   // Set preprocessor descriptor callbacks
   // --------------------------------------------------
-  if (preprocessing == "Descriptor")
+  if (preprocessing == "descriptor")
   {
 #ifdef USE_LIBDESC
     descriptor = std::unique_ptr<Descriptor::DescriptorKind>(
@@ -136,7 +136,7 @@ TorchMLModelDriverImplementation::TorchMLModelDriverImplementation(
     return;
 #endif
   }
-  else if (preprocessing == "Graph")
+  else if (preprocessing == "graph")
   {
 #ifndef DISABLE_GRAPH
     for (int i = 0; i < n_layers; i++)
@@ -248,14 +248,14 @@ void TorchMLModelDriverImplementation::preprocessInputs(
     KIM::ModelComputeArguments const * const modelComputeArguments)
 {
   // TODO: Make preprocessing type enums
-  if (preprocessing == "None") { setDefaultInputs(modelComputeArguments); }
-  else if (preprocessing == "Descriptor")
+  if (preprocessing == "none") { setDefaultInputs(modelComputeArguments); }
+  else if (preprocessing == "descriptor")
   {
 #ifdef USE_LIBDESC
     setDescriptorInputs(modelComputeArguments);
 #endif
   }
-  else if (preprocessing == "Graph")
+  else if (preprocessing == "graph")
   {
 #ifndef DISABLE_GRAPH
     setGraphInputs(modelComputeArguments);
@@ -305,7 +305,7 @@ void TorchMLModelDriverImplementation::postprocessOutputs(
   //   &virial);
   if (ier) return;
 
-  if (preprocessing != "Descriptor")
+  if (preprocessing != "descriptor")
   {
     ml_model->Run(energy, partialEnergy, forces, !returns_forces);
   }
@@ -353,7 +353,9 @@ void TorchMLModelDriverImplementation::postprocessOutputs(
       }
       // neg_dE_dzeta = -dE/dzeta, therefore forces = neg_d_desc * dzeta/dr, no
       // negation needed now
-      std::memcpy(forces, force_accessor.get(), *numberOfParticlesPointer * 3 * sizeof(double));
+      std::memcpy(forces,
+                  force_accessor.get(),
+                  *numberOfParticlesPointer * 3 * sizeof(double));
     }
     else if (forces && !neg_dE_dzeta)
     {
@@ -584,7 +586,7 @@ void TorchMLModelDriverImplementation::setGraphInputs(
   int const * neighbors;
 
   std::unordered_set<int> atoms_in_layers;
-  std::vector<std::unordered_set<std::array<std::int64_t, 2>,CantorPairing>>
+  std::vector<std::unordered_set<std::array<std::int64_t, 2>, CantorPairing> >
       staged_graph(n_layers);
 
   for (int i = 0; i < *numberOfParticlesPointer; i++)
@@ -692,7 +694,7 @@ void TorchMLModelDriverImplementation::setGraphInputs(
         2 + i, graph_edge_indices[i].data(), shape, false, true);
   }
 
-  contraction_array.assign(*numberOfParticlesPointer, 0);
+  contraction_array.assign(effectiveNumberOfParticlePointers, 0);
   for (int i = 0; i < effectiveNumberOfParticlePointers; i++)
   {
     contraction_array[i] = (particleContributing[i] == 0) ? 1 : 0;
@@ -803,8 +805,8 @@ void TorchMLModelDriverImplementation::readParametersFile(
     } while (placeholder_string[0] == '#');
     // which preprocessing to use
     preprocessing = placeholder_string;
-    // std::transform(preprocessing.begin(),preprocessing.end(),
-    //                preprocessing.begin(),::tolower);
+    std::transform(preprocessing.begin(),preprocessing.end(),
+                   preprocessing.begin(),::tolower);
 
     // blank line
     std::getline(file_ptr, placeholder_string);
@@ -815,7 +817,7 @@ void TorchMLModelDriverImplementation::readParametersFile(
     // influence distance
     cutoff_distance = std::stod(placeholder_string);
     n_layers = 0;
-    if (preprocessing == "Graph")
+    if (preprocessing == "graph")
     {
 #ifndef DISABLE_GRAPH
       std::getline(file_ptr, placeholder_string);
@@ -860,7 +862,7 @@ void TorchMLModelDriverImplementation::readParametersFile(
     // number of strings
     number_of_inputs = std::stoi(placeholder_string);
 
-    if (preprocessing == "Descriptor")
+    if (preprocessing == "descriptor")
     {
 #ifdef USE_LIBDESC
       // blank line
@@ -945,7 +947,7 @@ int TorchMLModelDriverImplementation::WriteParameterizedModel(
   fp << "# preprocessing\n";
   fp << cutoff_distance << "\n";
 
-  if (preprocessing == "Graph") { fp << n_layers << "\n\n"; }
+  if (preprocessing == "graph") { fp << n_layers << "\n\n"; }
 
   fp << "# Model name\n";
   fp << model_name << "\n\n";
@@ -961,7 +963,7 @@ int TorchMLModelDriverImplementation::WriteParameterizedModel(
 
   fp.close();
 
-  if (preprocessing == "Descriptor")
+  if (preprocessing == "descriptor")
   {
     std::string descriptor_file = *path + "/" + "descriptor.dat";
     std::ofstream fp_desc(descriptor_file);

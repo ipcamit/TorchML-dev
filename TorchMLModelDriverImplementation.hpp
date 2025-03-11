@@ -149,7 +149,7 @@ class CantorPairing
     //
     // return ((ksum * ksum - ksum % 2) + kmin) / 4;
     int64_t sum = k1 + k2;
-    int64_t triangleNumber = sum * (sum + 1) /2;
+    int64_t triangleNumber = sum * (sum + 1) / 2;
     return triangleNumber + k2;
   }
 };

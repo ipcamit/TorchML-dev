@@ -93,57 +93,71 @@ void PytorchModel::SetExecutionDevice(std::string & device_name)
 }
 
 
-void PytorchModel::Run(double * energy,
-                       double * partial_energy,
-                       double * forces,
+void PytorchModel::Run(double *energy,
+                       double *partial_energy,
+                       double *forces,
                        bool backprop)
 {
-  // Energy is a required property for both energy and forces
-  auto out_tensor = module_.forward(model_inputs_).toTuple()->elements();
-  auto partial_energy_tensor = out_tensor[0].toTensor();
-  auto energy_tensor = partial_energy_tensor.sum();
+  torch::Tensor partial_energy_tensor;
+  torch::Tensor energy_tensor;
   c10::optional<torch::Tensor> forces_tensor = torch::nullopt;
 
-  if (backprop && forces)
+  // fwd pass
+  auto out_tensor = module_.forward(model_inputs_);
+
+  // tuple or tensor?
+  if (out_tensor.isTuple())
   {
-    // need backprop for forces
+    auto out_tensor_tuple = out_tensor.toTuple()->elements();
+    partial_energy_tensor = out_tensor_tuple[0].toTensor();
+
+    if (out_tensor_tuple.size() > 1)
+    {
+      forces_tensor = out_tensor_tuple[1].toTensor();
+    }
+  }
+  else { partial_energy_tensor = out_tensor.toTensor(); }
+
+  // get total energy
+  energy_tensor = partial_energy_tensor.sum();
+
+  // backprop
+  if (backprop)
+  {
     energy_tensor.backward();
-    forces_tensor = -model_inputs_[grad_idx].toTensor().grad().to(torch::kCPU);
-    std::memcpy(forces,
-                forces_tensor->contiguous().data_ptr<double>(),
-                forces_tensor->numel() * sizeof(double));
-  }
-  else if (!backprop && forces && out_tensor.size() == 2)
-  {
-    // model provides forces
-    forces_tensor = out_tensor[1].toTensor().to(torch::kCPU);
-    std::memcpy(forces,
-                forces_tensor->contiguous().data_ptr<double>(),
-                forces_tensor->numel() * sizeof(double));
-  }
-  else if (!backprop && forces && out_tensor.size() < 2)
-  {
-    throw std::runtime_error("Requested forces, but neither model provides "
-                             "forces nor backpropagation was requested");
+    forces_tensor = -model_inputs_[grad_idx].toTensor().grad();
   }
 
-  // assign everything
-  if (energy) { *energy = *(energy_tensor.to(torch::kCPU).data_ptr<double>()); }
+  // partialEnergy
+  if (energy) { *energy = energy_tensor.to(torch::kCPU).item<double>(); }
 
+  // assign partial energy if everything is in order
   if (partial_energy)
   {
-    if (partial_energy_tensor.sizes().size() > 0)
-    {
-      std::memcpy(
-          partial_energy,
-          partial_energy_tensor.to(torch::kCPU).contiguous().data_ptr<double>(),
-          partial_energy_tensor.numel() * sizeof(double));
-    }
-    else
+    if (partial_energy_tensor.dim() == 0)
     {
       throw std::runtime_error(
-          "Requested partial energy, but the model does not provide it\n");
+          "Requested partial energy, but model only provided a scalar.");
     }
+
+    std::memcpy(
+        partial_energy,
+        partial_energy_tensor.to(torch::kCPU).contiguous().data_ptr<double>(),
+        partial_energy_tensor.numel() * sizeof(double));
+  }
+
+  // assign forces
+  if (forces)
+  {
+    if (!forces_tensor.has_value())
+    {
+      throw std::runtime_error("Forces requested, but neither model provides "
+                               "forces nor backpropagation was requested.");
+    }
+
+    std::memcpy(forces,
+                forces_tensor->to(torch::kCPU).contiguous().data_ptr<double>(),
+                forces_tensor->numel() * sizeof(double));
   }
 }
 

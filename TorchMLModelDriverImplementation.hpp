@@ -78,8 +78,7 @@ class TorchMLModelDriverImplementation
   std::vector<std::vector<std::int64_t> > graph_edge_indices;
 
   void
-  updateNeighborList(KIM::ModelComputeArguments const * modelComputeArguments,
-                     int numberOfParticles);
+  updateNeighborList(KIM::ModelComputeArguments const * modelComputeArguments);
 
   void
   setDefaultInputs(const KIM::ModelComputeArguments * modelComputeArguments);

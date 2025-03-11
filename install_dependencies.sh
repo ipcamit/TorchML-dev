@@ -119,7 +119,7 @@ if [[ -z "${TORCH_ROOT}" ]]; then
     if [[ $is_cuda_available -eq 1 ]]; then
         wget https://download.pytorch.org/libtorch/cu117/libtorch-cxx11-abi-shared-with-deps-1.13.0%2Bcu117.zip
         unzip libtorch-cxx11-abi-shared-with-deps-1.13.0+cu117.zip || exit
-        # rm libtorch-cxx11-abi-shared-with-deps-1.9.0+cu111.zip
+        # rm libtorch-cxx11-abi-shared-with-deps-1.13.0+cu111.zip
     else
         wget https://download.pytorch.org/libtorch/cpu/libtorch-cxx11-abi-shared-with-deps-1.13.0%2Bcpu.zip
         unzip libtorch-cxx11-abi-shared-with-deps-1.13.0+cpu.zip || exit
@@ -149,6 +149,7 @@ if [[ -z "${TorchScatter_ROOT}" ]]; then
     echo "Installing TorchScatter"
     # Install TorchScatter
     git clone --recurse-submodules https://github.com/rusty1s/pytorch_scatter || exit
+    cd pytorch_scatter; git checkout fa4f442952955acf8fe9fcfb98b600f6ca6081b6; cd ..;
     mkdir -p build_scatter
     cd build_scatter || exit
     if [[ $is_cuda_available -eq 1 ]]; then
@@ -181,6 +182,7 @@ if [[ -z "${TorchSparse_ROOT}" ]]; then
     echo "Installing TorchSparse"
     # Install TorchSparse
     git clone --recurse-submodules https://github.com/rusty1s/pytorch_sparse || exit
+    cd pytorch_sparse; git checkout e55e8331ef2881b934036054cbcd39f8efcd4725; cd ..;
     mkdir -p build_sparse
     cd build_sparse || exit
     if [[ $is_cuda_available -eq 1 ]]; then

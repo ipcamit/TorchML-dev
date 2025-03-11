@@ -91,13 +91,13 @@ class PytorchModel : public MLModel
     // Create tensor from blob
     torch::Tensor input_tensor = torch::from_blob(data, shape, options);
 
-    // Only need clone if device is CPU, else implicit deep copy will be
-    // triggered
-    if (clone || (*device_ == torch::kCPU)) input_tensor = input_tensor.clone();
-
     // explicit copy to device if not done already
     if (input_tensor.device() != *device_)
       input_tensor = input_tensor.to(*device_);
+
+    // Only need clone if device is CPU, else implicit deep copy will be
+    // triggered
+    if (clone || (*device_ == torch::kCPU)) input_tensor = input_tensor.clone();
 
     // Workaround for PyTorch bug
     if (requires_grad)

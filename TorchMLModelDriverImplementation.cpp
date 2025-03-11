@@ -7,10 +7,9 @@
 #include <vector>
 
 #ifndef DISABLE_GRAPH
-
 #include <torchscatter/scatter.h>
-
 #endif
+
 #define MAX_FILE_NUM 3
 
 //******************************************************************************
@@ -307,7 +306,17 @@ void TorchMLModelDriverImplementation::postprocessOutputs(
 
   if (preprocessing != "descriptor")
   {
-    ml_model->Run(energy, partialEnergy, forces, !returns_forces);
+    if (*numberOfParticlesPointer == 1)
+    {  // padded single particle GNN
+      auto forces_padded
+          = std::make_unique<double[]>((*numberOfParticlesPointer + 1) * 3);
+      ml_model->Run(
+          energy, partialEnergy, forces_padded.get(), !returns_forces);
+      std::memcpy(forces,
+                  forces_padded.get(),
+                  *numberOfParticlesPointer * 3 * sizeof(double));
+    }
+    else { ml_model->Run(energy, partialEnergy, forces, !returns_forces); }
   }
   else
   {  // descriptor if-else
@@ -370,8 +379,7 @@ void TorchMLModelDriverImplementation::postprocessOutputs(
 
 // -----------------------------------------------------------------------------
 void TorchMLModelDriverImplementation::updateNeighborList(
-    KIM::ModelComputeArguments const * const modelComputeArguments,
-    int const numberOfParticles)
+    KIM::ModelComputeArguments const * const modelComputeArguments)
 {
   int const * numberOfParticlesPointer = nullptr;
   int const * particleContributing = nullptr;
@@ -437,7 +445,7 @@ void TorchMLModelDriverImplementation::setDefaultInputs(
     return;
   }
 
-  updateNeighborList(modelComputeArguments, n_contributing_atoms);
+  updateNeighborList(modelComputeArguments);
 
   species_atomic_number.assign(*numberOfParticlesPointer, 0);
   contraction_array.assign(*numberOfParticlesPointer, 0);
@@ -519,7 +527,7 @@ void TorchMLModelDriverImplementation::setDescriptorInputs(
   int neigh_from, n_neigh;
   neigh_from = 0;
   int width = descriptor->width;
-  updateNeighborList(modelComputeArguments, n_contributing_atoms);
+  updateNeighborList(modelComputeArguments);
 
   descriptor_array.assign(n_contributing_atoms * width, 0.0);
 
@@ -675,16 +683,46 @@ void TorchMLModelDriverImplementation::setGraphInputs(
     }
   }
 
-  // Fix for isolated atoms. Append a dummy particle, not in graph
-  int effectiveNumberOfParticlePointers
-      = (*numberOfParticlesPointer == 1) ? 2 : *numberOfParticlesPointer;
+  contraction_array.assign(*numberOfParticlesPointer, 1);
+  for (int i = 0; i < *numberOfParticlesPointer; i++)
+  {
+    contraction_array[i] = (particleContributing[i] == 0) ? 1 : 0;
+  }
 
-  auto shape = std::vector<std::int64_t> {effectiveNumberOfParticlePointers};
+  // Fix for isolated atoms. Append a dummy particle, not in graph
+  std::unique_ptr<double[]> padded_coordinates;
+  int effectiveNumberOfParticlePointers;
+  auto shape = std::vector<std::int64_t> {};
+
+  if (*numberOfParticlesPointer == 1)
+  {
+    effectiveNumberOfParticlePointers
+        = (*numberOfParticlesPointer == 1) ? 2 : *numberOfParticlesPointer;
+    species_atomic_number.push_back(particleSpeciesCodes[0]);
+    contraction_array.push_back(1);
+    padded_coordinates = std::make_unique<double[]>((*numberOfParticlesPointer + 1) * 3);
+    std::memcpy(padded_coordinates.get(),
+                coordinates,
+                *numberOfParticlesPointer * 3 * sizeof(double));
+    padded_coordinates[*numberOfParticlesPointer * 3 + 0] = 999.0;
+    padded_coordinates[*numberOfParticlesPointer * 3 + 1] = 999.0;
+    padded_coordinates[*numberOfParticlesPointer * 3 + 2] = 999.0;
+    shape.clear();
+    shape = {effectiveNumberOfParticlePointers, 3};
+    ml_model->SetInputNode(1, padded_coordinates.get(), shape, true, true);
+  }
+  else
+  {
+    effectiveNumberOfParticlePointers = *numberOfParticlesPointer;
+    shape.clear();
+    shape = {effectiveNumberOfParticlePointers, 3};
+    ml_model->SetInputNode(1, coordinates, shape, true, true);
+  }
+  shape.clear();
+  shape = {effectiveNumberOfParticlePointers};
+
   ml_model->SetInputNode(0, species_atomic_number.data(), shape, false, true);
 
-  shape.clear();
-  shape = {effectiveNumberOfParticlePointers, 3};
-  ml_model->SetInputNode(1, coordinates, shape, true, true);
 
   for (int i = 0; i < n_layers; i++)
   {
@@ -694,13 +732,8 @@ void TorchMLModelDriverImplementation::setGraphInputs(
         2 + i, graph_edge_indices[i].data(), shape, false, true);
   }
 
-  contraction_array.assign(effectiveNumberOfParticlePointers, 0);
-  for (int i = 0; i < effectiveNumberOfParticlePointers; i++)
-  {
-    contraction_array[i] = (particleContributing[i] == 0) ? 1 : 0;
-  }
   shape.clear();
-  shape = {*numberOfParticlesPointer};
+  shape = {effectiveNumberOfParticlePointers};
   ml_model->SetInputNode(
       2 + n_layers, contraction_array.data(), shape, false, true);
 }
@@ -805,8 +838,10 @@ void TorchMLModelDriverImplementation::readParametersFile(
     } while (placeholder_string[0] == '#');
     // which preprocessing to use
     preprocessing = placeholder_string;
-    std::transform(preprocessing.begin(),preprocessing.end(),
-                   preprocessing.begin(),::tolower);
+    std::transform(preprocessing.begin(),
+                   preprocessing.end(),
+                   preprocessing.begin(),
+                   ::tolower);
 
     // blank line
     std::getline(file_ptr, placeholder_string);
@@ -849,9 +884,10 @@ void TorchMLModelDriverImplementation::readParametersFile(
     } while (placeholder_string[0] == '#');
     // Does the model return forces? If no then we need to compute gradients
     // If yes we can optimize it further using inference mode
-    for (char & t : placeholder_string) t = static_cast<char>(tolower(t));
-    returns_forces
-        = placeholder_string == "true" || placeholder_string == "True";
+
+    auto return_forces_str = std::string{placeholder_string};
+    std::transform(return_forces_str.begin(), return_forces_str.end(), return_forces_str.begin(), ::tolower);
+    returns_forces = return_forces_str == "true";
 
     // blank line
     std::getline(file_ptr, placeholder_string);
@@ -873,16 +909,17 @@ void TorchMLModelDriverImplementation::readParametersFile(
       } while (placeholder_string[0] == '#');
       // number of strings
       descriptor_name = placeholder_string;
+      std::transform(descriptor_name.begin(), descriptor_name.end(), descriptor_name.begin(), ::tolower);
       descriptor_param_file = *param_dir_name + "/" + *descriptor_file_name;
-      if (descriptor_name == "SymmetryFunctions")
+      if (descriptor_name == "symmetryfunctions")
       {
         descriptor_kind = AvailableDescriptor::KindSymmetryFunctions;
       }
-      else if (descriptor_name == "Bispectrum")
+      else if (descriptor_name == "bispectrum")
       {
         descriptor_kind = AvailableDescriptor::KindBispectrum;
       }
-      else if (descriptor_name == "SOAP")
+      else if (descriptor_name == "soap")
       {
         descriptor_kind = AvailableDescriptor::KindSOAP;
       }
@@ -994,8 +1031,8 @@ void TorchMLModelDriverImplementation::unitConversion(
     KIM::ModelDriverCreate * const modelDriverCreate,
     KIM::LengthUnit const requestedLengthUnit,
     KIM::EnergyUnit const requestedEnergyUnit,
-    KIM::ChargeUnit const requestedChargeUnit,
-    KIM::TemperatureUnit const requestedTemperatureUnit,
+    [[maybe_unused]]KIM::ChargeUnit const requestedChargeUnit,
+    [[maybe_unused]]KIM::TemperatureUnit const requestedTemperatureUnit,
     KIM::TimeUnit const requestedTimeUnit,
     int * const ier)
 {

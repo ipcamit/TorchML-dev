@@ -28,24 +28,32 @@ else
 fi
 
 current_dir=$(pwd)
-
 # Check for cuda
 if ! command -v nvcc &> /dev/null
 then
     echo "Info: cuda not found, installing cpu version of dependencies"
     is_cuda_available=0
 else
-    echo "Info: cuda found, installing gpu version of dependencies"
-    # is cudnn available, check for CUDNN_ROOT
-    is_cuda_available=1
-    if [[ -z "${CUDNN_ROOT}" ]]; then
-        echo "---------------------------------------------------------------------"
-        echo -e "CUDNN_ROOT env variable not found;\n THIS STEP CANNOT BE AUTOMATED \n Please first provide with cudnn install location"
-        echo -e "CUDNN can be downloaded from: https://developer.nvidia.com/rdp/cudnn-archive \n after registering"
-        echo "---------------------------------------------------------------------"
-        exit 2
+    echo "Info: cuda found, installing should install GPU version of dependencies? [y/n]"
+    read -r response
+    if [[ "$responnse" =~ [yY] ]]
+    then
+        echo "Continuing CUDA based installation"
+
+        # is cudnn available, check for CUDNN_ROOT
+        is_cuda_available=1
+        if [[ -z "${CUDNN_ROOT}" ]]; then
+            echo "---------------------------------------------------------------------"
+            echo -e "CUDNN_ROOT env variable not found;\n THIS STEP CANNOT BE AUTOMATED \n Please first provide with cudnn install location"
+            echo -e "CUDNN can be downloaded from: https://developer.nvidia.com/rdp/cudnn-archive \n after registering"
+            echo "---------------------------------------------------------------------"
+            exit 2
+        else
+            echo "Info: Located CUDNN at ${CUDNN_ROOT}"
+        fi
     else
-        echo "Info: Located CUDNN at ${CUDNN_ROOT}"
+        echo "Continuing CPU based installation"
+        is_cuda_available=0
     fi
 fi
 
@@ -96,8 +104,19 @@ then
     # Add KIM-API to path
     echo "# KIM-API " >> env.sh
     # KIM has to be installed with user prefix of /usr/local as otherwise CMAKE gives errors
+    # Add path
+    if [ -d "${current_dir}"/kim-api/install/usr/local/lib64 ]; then
+        LIB_DIR_NAME="lib64"
+    elif [ -d "${current_dir}"/kim-api/install/usr/local/lib ]; then
+        LIB_DIR_NAME="lib"
+    else
+        echo "ERROR: NO INSTALL LIB FOUND, KIM API INSTALLATION FAILED, PLEASE CHECK THE OUTPUTS."
+    fi
+
+    echo "Using std library folder name as ${LIB_DIR_NAME}"
+
     KIM_PATH="${current_dir}"/kim-api/install/usr/local/bin
-    KIM_LIB="${current_dir}"/kim-api/install/usr/local/lib
+    KIM_LIB="${current_dir}"/kim-api/install/usr/local/$LIB_DIR_NAME
     KIM_INCLUDE="${current_dir}"/kim-api/install/usr/local/include
 
     echo "export PATH=$KIM_PATH:\$PATH" >> env.sh
@@ -158,11 +177,30 @@ if [[ -z "${TorchScatter_ROOT}" ]]; then
         cmake -DCMAKE_PREFIX_PATH="${TORCH_ROOT}" -DCMAKE_INSTALL_PREFIX="" -DCMAKE_BUILD_TYPE=Release ../pytorch_scatter || exit
     fi
     make install DESTDIR="${current_dir}/pytorch_scatter/install" || exit
+
     # Add TorchScatter to path
+    if [ -d "${current_dir}"/pytorch_scatter/install/lib64 ]; then
+        LIB_DIR_NAME="lib64"
+    elif [ -d "${current_dir}"/pytorch_scatter/install/lib ]; then
+        LIB_DIR_NAME="lib"
+    else
+        echo "ERROR: NO INSTALL LIB FOUND, TORCH SCATTER INSTALLATION FAILED, PLEASE CHECK THE OUTPUTS."
+    fi
+
+
+    if [ -d "${current_dir}"/pytorch_scatter/install/share/cmake ]; then
+        CMAKE_DIR_NAME="share/cmake"
+    elif [ -d "${current_dir}"/pytorch_scatter/install/lib/cmake ]; then
+        CMAKE_DIR_NAME="lib/cmake"
+    else
+        echo "ERROR: NO INSTALL CMAKE FOLDER FOUND, TORCH SCATTER INSTALLATION FAILED, PLEASE CHECK THE OUTPUTS."
+    fi
+
+
     TorchScatter_ROOT="${current_dir}"/pytorch_scatter/install
-    TorchScatter_LIB="${current_dir}"/pytorch_scatter/install/lib64
+    TorchScatter_LIB="${current_dir}"/pytorch_scatter/install/$LIB_DIR_NAME
     TorchScatter_INCLUDE="${current_dir}"/pytorch_scatter/install/include
-    TorchScatter_DIR="${current_dir}"/pytorch_scatter/install/share/cmake
+    TorchScatter_DIR="${current_dir}"/pytorch_scatter/install/$CMAKE_DIR_NAME
 
     cd ${current_dir} || exit
 
@@ -192,10 +230,29 @@ if [[ -z "${TorchSparse_ROOT}" ]]; then
     fi
     make install DESTDIR="${current_dir}/pytorch_sparse/install" || exit
     # Add TorchSparse to path
+
+    # Add TorchSparse to path
+    if [ -d "${current_dir}"/pytorch_sparse/install/lib64 ]; then
+        LIB_DIR_NAME="lib64"
+    elif [ -d "${current_dir}"/pytorch_sparse/install/lib ]; then
+        LIB_DIR_NAME="lib"
+    else
+        echo "ERROR: NO INSTALL LIB FOUND, TORCH SPARSE INSTALLATION FAILED, PLEASE CHECK THE OUTPUTS."
+    fi
+
+
+    if [ -d "${current_dir}"/pytorch_sparse/install/share/cmake ]; then
+        CMAKE_DIR_NAME="share/cmake"
+    elif [ -d "${current_dir}"/pytorch_sparse/install/lib/cmake ]; then
+        CMAKE_DIR_NAME="lib/cmake"
+    else
+        echo "ERROR: NO INSTALL CMAKE FOLDER FOUND, TORCH SPARSE INSTALLATION FAILED, PLEASE CHECK THE OUTPUTS."
+    fi
+
     TorchSparse_ROOT="${current_dir}"/pytorch_sparse/install
-    TorchSparse_LIB="${current_dir}"/pytorch_sparse/install/lib64
+    TorchSparse_LIB="${current_dir}"/pytorch_sparse/install/$LIB_DIR_NAME
     TorchSparse_INCLUDE="${current_dir}"/pytorch_sparse/install/include
-    TorchSparse_DIR="${current_dir}"/pytorch_sparse/install/share/cmake
+    TorchSparse_DIR="${current_dir}"/pytorch_sparse/install/$CMAKE_DIR_NAME
 
     cd ${current_dir} || exit
 

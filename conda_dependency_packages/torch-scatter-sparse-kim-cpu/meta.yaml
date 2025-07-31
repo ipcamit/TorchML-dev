@@ -1,0 +1,22 @@
+{% set version      = "0.0.1" %}
+{% set build_number = 0 %}
+
+package:
+  name: torch-scatter-sparse-kim-cpu
+  version: {{ version }}
+
+build:
+  number: {{ build_number }}
+  binary_relocation: false
+
+requirements:
+  run:                                # everything must exist *on the target*
+    - python 3.9                      # [linux]
+    - cmake 3.18                   # [linux]
+    - ninja                          # [linux]
+    - {{ compiler('cxx') }}          # [linux]
+
+about:
+  summary: "Installs libtorch and builds pytorch-scatter & pytorch-sparse at install-time (CPU, Linux only)."
+  license: MIT
+  home: https://github.com/rusty1s

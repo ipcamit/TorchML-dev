@@ -1,0 +1,28 @@
+{% set version      = "0.0.1" %}
+{% set build_number = 5 %}
+{% set cuda_major   = "11" %}
+{% set cuda_minor   = "7" %}
+{% set cuda         = cuda_major + cuda_minor %}
+
+package:
+  name: torch-scatter-sparse-kim
+  version: {{ version }}
+
+build:
+  number: {{ build_number }}
+  string: cuda{{ cuda }}_{{ build_number }}
+  binary_relocation: false
+
+requirements:
+  run:                                # everything must exist *on the target*
+    - python 3.9                      # [linux]
+    - cmake 3.18                   # [linux]
+    - ninja                          # [linux]
+    - {{ compiler('cxx') }}          # [linux]
+    - cudatoolkit-dev {{ cuda_major }}.{{ cuda_minor }}.*  # [linux]
+    - cudnn 8.9                      # [linux]
+
+about:
+  summary: "Installs libtorch and builds pytorch-scatter & pytorch-sparse at install-time (CUDA-11.7, Linux only)."
+  license: MIT
+  home: https://github.com/rusty1s

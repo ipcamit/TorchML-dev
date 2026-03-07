@@ -647,9 +647,8 @@ void TorchMLModelDriverImplementation::setGraphInputs(
   // TODO: Read this from file
   //  Get environment variable KIM_MODEL_ELEMENTS_MAP, and set map_species_z to
   //  true if it is set, else false
-  bool map_species_z = std::getenv("KIM_MODEL_ELEMENTS_MAP") != nullptr;
 
-  if (map_species_z)
+  if (map_species_to_z)
   {
     for (int i = 0; i < *numberOfParticlesPointer; i++)
     {
@@ -810,6 +809,8 @@ void TorchMLModelDriverImplementation::readParametersFile(
     {
       z_map.push_back(sym_to_z(elements_list[i]));
     }
+
+    map_species_to_z = std::getenv("KIM_MODEL_ELEMENTS_MAP") != nullptr;
 
     // blank line
     std::getline(file_ptr, placeholder_string);

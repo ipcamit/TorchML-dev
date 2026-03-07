@@ -18,10 +18,10 @@
 template<typename T>
 torch::Dtype getTorchDtype()
 {
-  if (std::is_same<T, int>::value) return torch::kInt32;
-  if (std::is_same<T, std::int64_t>::value) return torch::kInt64;
-  if (std::is_same<T, float>::value) return torch::kFloat32;
-  if (std::is_same<T, double>::value) return torch::kFloat64;
+  if (std::is_same_v<T, int>) return torch::kInt32;
+  if (std::is_same_v<T, std::int64_t>) return torch::kInt64;
+  if (std::is_same_v<T, float>) return torch::kFloat32;
+  if (std::is_same_v<T, double>) return torch::kFloat64;
   throw std::runtime_error("Invalid datatype provided as input to the model");
 }
 
@@ -90,8 +90,8 @@ class PytorchModel : public MLModel
     // Create tensor from blob
     torch::Tensor input_tensor = torch::from_blob(data, shape, options);
 
-    // Keep API inputs as double, but allow internal model precision control.
-    if constexpr (std::is_floating_point<T>::value)
+    // Keep KIMAPI inputs as double, but allow internal model precision control
+    if constexpr (std::is_floating_point_v<T>)
     {
       if (input_tensor.dtype() != model_precision_)
       {

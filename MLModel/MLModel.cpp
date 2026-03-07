@@ -161,6 +161,7 @@ void PytorchModel::Run(double *energy,
   }
 
   // partialEnergy
+  // .item<double> has implicit cast
   if (energy) { *energy = energy_tensor.to(torch::kCPU).item<double>(); }
 
   // assign partial energy if everything is in order

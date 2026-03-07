@@ -61,6 +61,9 @@ class TorchMLModelDriverImplementation
   int modelWillNotRequestNeighborsOfNoncontributingParticles_;
   int n_contributing_atoms;
   int number_of_inputs;
+
+  bool map_species_to_z;
+
   std::vector<std::int64_t> species_atomic_number;
   std::vector<std::int64_t> contraction_array;
 

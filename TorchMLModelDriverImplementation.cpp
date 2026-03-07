@@ -1,5 +1,6 @@
 #include "TorchMLModelDriverImplementation.hpp"
 #include "KIM_LogMacros.hpp"
+#include "TorchScriptModel.hpp"
 #include "TorchMLModelDriver.hpp"
 #include <fstream>
 #include <map>
@@ -40,8 +41,8 @@ TorchMLModelDriverImplementation::TorchMLModelDriverImplementation(
   readParametersFile(modelDriverCreate, ier);
   // Load Torch Model
   // ----------------------------------------------------------------
-  ml_model = std::unique_ptr<MLModel>(
-      MLModel::create(fully_qualified_model_name, device, number_of_inputs));
+  ml_model = std::make_unique<TorchScriptModel>(
+      fully_qualified_model_name, device, number_of_inputs);
   LOG_INFORMATION("Loaded Torch model and set to eval");
   LOG_DEBUG("Read Param files");
   if (*ier) return;

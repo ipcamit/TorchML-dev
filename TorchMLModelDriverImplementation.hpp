@@ -7,7 +7,12 @@
 
 #include "KIM_ModelDriverHeaders.hpp"
 #include "MLModel.hpp"
+
+#include <array>
+#include <cstdint>
 #include <memory>
+#include <string>
+#include <vector>
 
 
 #ifdef USE_LIBDESC

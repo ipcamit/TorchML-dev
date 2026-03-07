@@ -1,10 +1,12 @@
 #include "MLModel.hpp"
+#include <algorithm>
+#include <cctype>
+#include <cstring>
 #include <iostream>
 #include <stdexcept>
 #include <string>
 
 #ifdef USE_MPI
-#include <algorithm>
 #include <mpi.h>
 #include <unistd.h>
 #endif
@@ -92,6 +94,36 @@ void PytorchModel::SetExecutionDevice(std::string & device_name)
   device_ = std::make_unique<torch::Device>(device_name_as_str);
 }
 
+void PytorchModel::SetModelPrecisionFromEnv()
+{
+  model_precision_ = torch::kFloat64;
+
+  const char * precision_env = std::getenv("KIM_MODEL_PRECISION");
+  if (precision_env == nullptr) { return; }
+
+  std::string precision(precision_env);
+  std::transform(precision.begin(),
+                 precision.end(),
+                 precision.begin(),
+                 [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+
+  if (precision == "double" || precision == "float64" || precision == "fp64")
+  {
+    model_precision_ = torch::kFloat64;
+  }
+  else if (precision == "float" || precision == "float32"
+           || precision == "single" || precision == "fp32")
+  {
+    model_precision_ = torch::kFloat32;
+  }
+  else
+  {
+    std::cerr << "WARNING: Unsupported KIM_MODEL_PRECISION='" << precision_env
+              << "'. Falling back to 'double'." << std::endl;
+    model_precision_ = torch::kFloat64;
+  }
+}
+
 
 void PytorchModel::Run(double *energy,
                        double *partial_energy,
@@ -142,7 +174,10 @@ void PytorchModel::Run(double *energy,
 
     std::memcpy(
         partial_energy,
-        partial_energy_tensor.to(torch::kCPU).contiguous().data_ptr<double>(),
+        partial_energy_tensor.to(torch::kFloat64)
+            .to(torch::kCPU)
+            .contiguous()
+            .data_ptr<double>(),
         partial_energy_tensor.numel() * sizeof(double));
   }
 
@@ -156,7 +191,10 @@ void PytorchModel::Run(double *energy,
     }
 
     std::memcpy(forces,
-                forces_tensor->to(torch::kCPU).contiguous().data_ptr<double>(),
+                forces_tensor->to(torch::kFloat64)
+                    .to(torch::kCPU)
+                    .contiguous()
+                    .data_ptr<double>(),
                 forces_tensor->numel() * sizeof(double));
   }
 }
@@ -167,6 +205,7 @@ PytorchModel::PytorchModel(std::string & model_file_path,
 {
   model_file_path_ = model_file_path;
   SetExecutionDevice(device_name);
+  SetModelPrecisionFromEnv();
   try
   {
     // Deserialize the ScriptModule from a file using torch::jit::load().
@@ -184,6 +223,7 @@ PytorchModel::PytorchModel(std::string & model_file_path,
 
   // Copy model to execution device
   module_.to(*device_);
+  module_.to(model_precision_);
 
   // Reserve size for the four fixed model inputs (particle_contributing,
   // coordinates, number_of_neighbors, neighbor_list)

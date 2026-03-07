@@ -2,7 +2,9 @@
 #define MLMODEL_HPP
 
 #include <cstdlib>
+#include <cstdint>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <type_traits>
 #include <vector>
@@ -72,8 +74,10 @@ class PytorchModel : public MLModel
   torch::jit::script::Module module_;
   std::vector<torch::jit::IValue> model_inputs_;
   std::unique_ptr<torch::Device> device_;
+  torch::Dtype model_precision_ = torch::kFloat64;
 
   void SetExecutionDevice(std::string & /*device_name*/);
+  void SetModelPrecisionFromEnv();
   int grad_idx;
 
   template<typename T>
@@ -85,11 +89,20 @@ class PytorchModel : public MLModel
   {
     // Configure tensor options
     torch::TensorOptions options = torch::TensorOptions()
-                                       .dtype(getTorchDtype<T>())
-                                       .requires_grad(requires_grad);
+                                        .dtype(getTorchDtype<T>())
+                                        .requires_grad(requires_grad);
 
     // Create tensor from blob
     torch::Tensor input_tensor = torch::from_blob(data, shape, options);
+
+    // Keep API inputs as double, but allow internal model precision control.
+    if constexpr (std::is_floating_point<T>::value)
+    {
+      if (input_tensor.dtype() != model_precision_)
+      {
+        input_tensor = input_tensor.to(model_precision_);
+      }
+    }
 
     // explicit copy to device if not done already
     if (input_tensor.device() != *device_)

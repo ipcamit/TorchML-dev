@@ -6,10 +6,6 @@
 #include <stdexcept>
 #include <vector>
 
-#ifndef DISABLE_GRAPH
-#include <torchscatter/scatter.h>
-#endif
-
 #define MAX_FILE_NUM 3
 
 //******************************************************************************
@@ -66,7 +62,6 @@ TorchMLModelDriverImplementation::TorchMLModelDriverImplementation(
   // ---------------------------------------------------------
   if (preprocessing == "graph")
   {
-#ifndef DISABLE_GRAPH
     modelWillNotRequestNeighborsOfNoncontributingParticles_
         = static_cast<int>(false);
   }
@@ -75,12 +70,6 @@ TorchMLModelDriverImplementation::TorchMLModelDriverImplementation(
     modelWillNotRequestNeighborsOfNoncontributingParticles_
         = static_cast<int>(true);
   }
-#else
-    LOG_ERROR("Graph preprocessing is not supported in this build");
-    *ier = true;
-    return;
-  }
-#endif
   modelDriverCreate->SetInfluenceDistancePointer(&influence_distance);
   modelDriverCreate->SetNeighborListPointers(
       1,
@@ -136,7 +125,6 @@ TorchMLModelDriverImplementation::TorchMLModelDriverImplementation(
   }
   else if (preprocessing == "graph")
   {
-#ifndef DISABLE_GRAPH
     for (int i = 0; i < n_layers; i++)
     {
       graph_edge_indices.push_back(std::vector<std::int64_t> {});
@@ -146,11 +134,7 @@ TorchMLModelDriverImplementation::TorchMLModelDriverImplementation(
 #ifdef USE_LIBDESC
     descriptor = nullptr;
 #endif
-#else
-    LOG_ERROR("Graph preprocessing is not supported in this build");
-    *ier = true;
-    return;
-#endif
+
   }
 }
 
@@ -255,9 +239,7 @@ void TorchMLModelDriverImplementation::preprocessInputs(
   }
   else if (preprocessing == "graph")
   {
-#ifndef DISABLE_GRAPH
     setGraphInputs(modelComputeArguments);
-#endif
   }
 }
 
@@ -747,10 +729,10 @@ void TorchMLModelDriverImplementation::readParametersFile(
   // Read parameter files from model driver
   // ---------------------------------------
   int num_param_files;
-  std::string const *param_file_name, *tmp_file_name;
-  std::string const * param_dir_name;
-  std::string const * model_file_name;
-  std::string const * descriptor_file_name;
+  std::string const *param_file_name = nullptr, *tmp_file_name = nullptr;
+  std::string const * param_dir_name = nullptr;
+  std::string const * model_file_name = nullptr;
+  [[maybe_unused]]std::string const * descriptor_file_name = nullptr;
 
   modelDriverCreate->GetNumberOfParameterFiles(&num_param_files);
 
@@ -853,15 +835,9 @@ void TorchMLModelDriverImplementation::readParametersFile(
     n_layers = 0;
     if (preprocessing == "graph")
     {
-#ifndef DISABLE_GRAPH
       std::getline(file_ptr, placeholder_string);
       n_layers = std::stoi(placeholder_string);
       influence_distance = cutoff_distance * n_layers;
-#else
-      LOG_ERROR("Graph preprocessing not supported");
-      *ier = true;
-      return;
-#endif
     }
     else { influence_distance = cutoff_distance; }
 

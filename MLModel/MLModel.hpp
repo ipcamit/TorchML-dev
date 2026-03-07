@@ -13,11 +13,6 @@
 #include <torch/script.h>
 #include <torch/torch.h>
 
-#ifndef DISABLE_GRAPH
-#include <torchscatter/scatter.h>
-#include <torchsparse/sparse.h>
-#endif
-
 
 // common datatype to torch type map.
 template<typename T>

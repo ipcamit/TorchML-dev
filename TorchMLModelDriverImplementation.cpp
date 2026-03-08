@@ -1,5 +1,6 @@
 #include "TorchMLModelDriverImplementation.hpp"
 #include "KIM_LogMacros.hpp"
+#include "TorchExportModel.hpp"
 #include "TorchScriptModel.hpp"
 #include "TorchMLModelDriver.hpp"
 #include <fstream>
@@ -8,6 +9,17 @@
 #include <vector>
 
 #define MAX_FILE_NUM 3
+
+namespace {
+
+inline bool hasSuffix(std::string const & value, std::string const & suffix)
+{
+  return value.size() >= suffix.size()
+         && value.compare(value.size() - suffix.size(), suffix.size(), suffix)
+                == 0;
+}
+
+}  // namespace
 
 //******************************************************************************
 #undef KIM_LOGGER_OBJECT_NAME
@@ -36,13 +48,23 @@ TorchMLModelDriverImplementation::TorchMLModelDriverImplementation(
   auto exec_device = std::getenv("KIM_MODEL_EXECUTION_DEVICE");
   auto device = exec_device ? std::string {exec_device} : std::string {"cpu"};
 
+  std::cout << "EXPERIMENTAL BUILD --- REMOVE ME\n";
+
   // Read parameter files from model driver
   // --------------------------------------- also initialize the ml_model
   readParametersFile(modelDriverCreate, ier);
   // Load Torch Model
   // ----------------------------------------------------------------
-  ml_model = std::make_unique<TorchScriptModel>(
-      fully_qualified_model_name, device, number_of_inputs);
+  if (hasSuffix(fully_qualified_model_name, ".pt2"))
+  {
+    ml_model = std::make_unique<TorchExportModel>(
+        fully_qualified_model_name, device, number_of_inputs);
+  }
+  else
+  {
+    ml_model = std::make_unique<TorchScriptModel>(
+        fully_qualified_model_name, device, number_of_inputs);
+  }
   LOG_INFORMATION("Loaded Torch model and set to eval");
   LOG_DEBUG("Read Param files");
   if (*ier) return;
@@ -645,10 +667,6 @@ void TorchMLModelDriverImplementation::setGraphInputs(
 
   species_atomic_number.assign(*numberOfParticlesPointer, 0);
 
-  // TODO: Read this from file
-  //  Get environment variable KIM_MODEL_ELEMENTS_MAP, and set map_species_z to
-  //  true if it is set, else false
-
   if (map_species_to_z)
   {
     for (int i = 0; i < *numberOfParticlesPointer; i++)
@@ -672,35 +690,15 @@ void TorchMLModelDriverImplementation::setGraphInputs(
 
   // Fix for isolated atoms. Append a dummy particle, not in graph
   std::unique_ptr<double[]> padded_coordinates;
-  int effectiveNumberOfParticlePointers;
   auto shape = std::vector<std::int64_t> {};
 
-  if (*numberOfParticlesPointer == 1)
-  {
-    effectiveNumberOfParticlePointers
-        = (*numberOfParticlesPointer == 1) ? 2 : *numberOfParticlesPointer;
-    species_atomic_number.push_back(particleSpeciesCodes[0]);
-    contraction_array.push_back(1);
-    padded_coordinates = std::make_unique<double[]>((*numberOfParticlesPointer + 1) * 3);
-    std::memcpy(padded_coordinates.get(),
-                coordinates,
-                *numberOfParticlesPointer * 3 * sizeof(double));
-    padded_coordinates[*numberOfParticlesPointer * 3 + 0] = 999.0;
-    padded_coordinates[*numberOfParticlesPointer * 3 + 1] = 999.0;
-    padded_coordinates[*numberOfParticlesPointer * 3 + 2] = 999.0;
-    shape.clear();
-    shape = {effectiveNumberOfParticlePointers, 3};
-    ml_model->SetInputNode(1, padded_coordinates.get(), shape, true, true);
-  }
-  else
-  {
-    effectiveNumberOfParticlePointers = *numberOfParticlesPointer;
-    shape.clear();
-    shape = {effectiveNumberOfParticlePointers, 3};
-    ml_model->SetInputNode(1, coordinates, shape, true, true);
-  }
+  int numberOfParticlePointers = *numberOfParticlesPointer;
   shape.clear();
-  shape = {effectiveNumberOfParticlePointers};
+  shape = {numberOfParticlePointers, 3};
+  ml_model->SetInputNode(1, coordinates, shape, true, true);
+
+  shape.clear();
+  shape = {numberOfParticlePointers};
 
   ml_model->SetInputNode(0, species_atomic_number.data(), shape, false, true);
 
@@ -714,7 +712,7 @@ void TorchMLModelDriverImplementation::setGraphInputs(
   }
 
   shape.clear();
-  shape = {effectiveNumberOfParticlePointers};
+  shape = {numberOfParticlePointers};
   ml_model->SetInputNode(
       2 + n_layers, contraction_array.data(), shape, false, true);
 }
@@ -747,21 +745,23 @@ void TorchMLModelDriverImplementation::readParametersFile(
   for (int i = 0; i < num_param_files; i++)
   {
     modelDriverCreate->GetParameterFileBasename(i, &tmp_file_name);
-    if (tmp_file_name->substr(tmp_file_name->size() - 5) == "param")
+    if (hasSuffix(*tmp_file_name, ".param"))
     {
       param_file_name = tmp_file_name;
     }
-    else if (tmp_file_name->substr(tmp_file_name->size() - 2) == "pt")
+    else if (hasSuffix(*tmp_file_name, ".pt2")
+             || hasSuffix(*tmp_file_name, ".pt"))
     {
       model_file_name = tmp_file_name;
     }
-    else if (tmp_file_name->substr(tmp_file_name->size() - 3) == "dat")
+    else if (hasSuffix(*tmp_file_name, ".dat"))
     {
       descriptor_file_name = tmp_file_name;
     }
     else
     {
-      LOG_ERROR("File extensions do not match; only expected .param or .pt");
+      LOG_ERROR(
+          "File extensions do not match; only expected .param, .pt, or .pt2");
       *ier = true;
       return;
     }

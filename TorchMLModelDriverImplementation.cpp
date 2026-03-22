@@ -3,8 +3,10 @@
 #include "TorchExportModel.hpp"
 #include "TorchScriptModel.hpp"
 #include "TorchMLModelDriver.hpp"
+#include <algorithm>
 #include <fstream>
 #include <map>
+#include <sstream>
 #include <stdexcept>
 #include <vector>
 
@@ -17,6 +19,20 @@ inline bool hasSuffix(std::string const & value, std::string const & suffix)
   return value.size() >= suffix.size()
          && value.compare(value.size() - suffix.size(), suffix.size(), suffix)
                 == 0;
+}
+
+inline std::string requestedHardwareTag(std::string const & requested_device)
+{
+  std::string hardware = requested_device.empty() ? "cpu" : requested_device;
+  auto const colon_pos = hardware.find(':');
+  if (colon_pos != std::string::npos)
+  {
+    hardware = hardware.substr(0, colon_pos);
+  }
+
+  std::transform(
+      hardware.begin(), hardware.end(), hardware.begin(), ::tolower);
+  return hardware;
 }
 
 }  // namespace
@@ -35,6 +51,8 @@ TorchMLModelDriverImplementation::TorchMLModelDriverImplementation(
     KIM::TimeUnit const requestedTimeUnit,
     int * const ier)
 {
+
+  std::cout << "<<< EXPERIMENTAL BUILD --- REMOVE ME WHEN DONE >>>" <<std::endl
   *ier = false;
   // initialize members to remove warning----
   influence_distance = 0.0;
@@ -47,8 +65,6 @@ TorchMLModelDriverImplementation::TorchMLModelDriverImplementation(
   number_of_inputs = 0;
   auto exec_device = std::getenv("KIM_MODEL_EXECUTION_DEVICE");
   auto device = exec_device ? std::string {exec_device} : std::string {"cpu"};
-
-  std::cout << "EXPERIMENTAL BUILD --- REMOVE ME\n";
 
   // Read parameter files from model driver
   // --------------------------------------- also initialize the ml_model
@@ -729,7 +745,7 @@ void TorchMLModelDriverImplementation::readParametersFile(
   int num_param_files;
   std::string const *param_file_name = nullptr, *tmp_file_name = nullptr;
   std::string const * param_dir_name = nullptr;
-  std::string const * model_file_name = nullptr;
+  std::vector<std::string> discovered_model_files;
   [[maybe_unused]]std::string const * descriptor_file_name = nullptr;
 
   modelDriverCreate->GetNumberOfParameterFiles(&num_param_files);
@@ -752,7 +768,7 @@ void TorchMLModelDriverImplementation::readParametersFile(
     else if (hasSuffix(*tmp_file_name, ".pt2")
              || hasSuffix(*tmp_file_name, ".pt"))
     {
-      model_file_name = tmp_file_name;
+      discovered_model_files.push_back(*tmp_file_name);
     }
     else if (hasSuffix(*tmp_file_name, ".dat"))
     {
@@ -770,9 +786,7 @@ void TorchMLModelDriverImplementation::readParametersFile(
   // Get param directory to load model and parameters from
   modelDriverCreate->GetParameterFileDirectoryName(&param_dir_name);
 
-  std::string full_qualified_file_name
-      = *param_dir_name + "/" + *param_file_name;
-  fully_qualified_model_name = *param_dir_name + "/" + *model_file_name;
+  std::string full_qualified_file_name = *param_dir_name + "/" + *param_file_name;
 
   std::string placeholder_string;
 
@@ -849,8 +863,77 @@ void TorchMLModelDriverImplementation::readParametersFile(
     do {
       std::getline(file_ptr, placeholder_string);
     } while (placeholder_string[0] == '#');
-    // Model name for comparison
-    model_name = placeholder_string;
+    // Model file(s). For TorchExport this can be a whitespace-separated list
+    // such as: model_cpu.pt2 model_cuda.pt2
+    std::vector<std::string> model_names_from_param;
+    {
+      std::istringstream model_names_stream(placeholder_string);
+      std::string token;
+      while (model_names_stream >> token)
+      {
+        model_names_from_param.push_back(token);
+      }
+    }
+
+    if (model_names_from_param.empty())
+    {
+      LOG_ERROR("No model file name found in parameter file");
+      *ier = true;
+      return;
+    }
+
+    auto const exec_device_env = std::getenv("KIM_MODEL_EXECUTION_DEVICE");
+    std::string const requested_device
+        = exec_device_env ? std::string {exec_device_env} : std::string {"cpu"};
+    std::string const requested_hardware
+        = requestedHardwareTag(requested_device);
+
+    bool const has_pt2_list
+        = std::any_of(model_names_from_param.begin(),
+                      model_names_from_param.end(),
+                      [](std::string const & name) {
+                        return hasSuffix(name, ".pt2");
+                      });
+
+    std::string selected_model_file;
+    if (has_pt2_list)
+    {
+      std::string const required_suffix = "_" + requested_hardware + ".pt2";
+      for (auto const & name : model_names_from_param)
+      {
+        if (hasSuffix(name, required_suffix))
+        {
+          selected_model_file = name;
+          break;
+        }
+      }
+
+      if (selected_model_file.empty())
+      {
+        LOG_ERROR("Could not find the model for requested hardware "
+                  + requested_hardware);
+        *ier = true;
+        return;
+      }
+    }
+    else
+    {
+      selected_model_file = model_names_from_param.front();
+    }
+
+    auto const discovered_it = std::find(discovered_model_files.begin(),
+                                         discovered_model_files.end(),
+                                         selected_model_file);
+    if (discovered_it == discovered_model_files.end())
+    {
+      LOG_ERROR("Model file listed in parameter file was not provided: "
+                + selected_model_file);
+      *ier = true;
+      return;
+    }
+
+    model_name = selected_model_file;
+    fully_qualified_model_name = *param_dir_name + "/" + model_name;
 
 
     // blank line
@@ -922,12 +1005,6 @@ void TorchMLModelDriverImplementation::readParametersFile(
   file_ptr.close();
 
   LOG_DEBUG("Successfully parsed parameter file");
-  if (*model_file_name != model_name)
-  {
-    LOG_ERROR("Provided model file name different from present model file.");
-    *ier = true;
-    return;
-  }
 }
 
 // -----------------------------------------------------------------------------

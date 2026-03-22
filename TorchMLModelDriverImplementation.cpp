@@ -52,7 +52,7 @@ TorchMLModelDriverImplementation::TorchMLModelDriverImplementation(
     int * const ier)
 {
 
-  std::cout << "<<< EXPERIMENTAL BUILD --- REMOVE ME WHEN DONE >>>" <<std::endl
+  std::cout << "<<< EXPERIMENTAL BUILD --- REMOVE ME WHEN DONE >>>" <<std::endl;
   *ier = false;
   // initialize members to remove warning----
   influence_distance = 0.0;

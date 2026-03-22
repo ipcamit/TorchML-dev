@@ -13,8 +13,4 @@ set_property(TARGET ${ML_RUNTIME_TARGET_LIB} PROPERTY POSITION_INDEPENDENT_CODE 
 set_property(TARGET ${ML_RUNTIME_TARGET_LIB} PROPERTY CXX_STANDARD 17)
 
 target_link_libraries(${ML_RUNTIME_TARGET_LIB} PRIVATE ${TORCH_LIBRARIES})
-
-# TODO: Set CXX_STANDARD target property here?
-
-# TODO: Copy DLLs if on windows?  See
-# https://pytorch.org/cppdocs/installing.html#minimal-example
+target_compile_features(${PROJECT_NAME} PRIVATE cxx_std_17)

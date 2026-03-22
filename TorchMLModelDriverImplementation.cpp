@@ -1,18 +1,19 @@
 #include "TorchMLModelDriverImplementation.hpp"
 #include "KIM_LogMacros.hpp"
-#include "TorchExportModel.hpp"
-#include "TorchScriptModel.hpp"
+#include "MLModel.hpp"
 #include "TorchMLModelDriver.hpp"
 #include <algorithm>
 #include <fstream>
+#include <iostream>
 #include <map>
+#include <unordered_map>
+#include <unordered_set>
+#include <cstring>
 #include <sstream>
 #include <stdexcept>
 #include <vector>
 
 #define MAX_FILE_NUM 3
-
-namespace {
 
 inline bool hasSuffix(std::string const & value, std::string const & suffix)
 {
@@ -34,8 +35,6 @@ inline std::string requestedHardwareTag(std::string const & requested_device)
       hardware.begin(), hardware.end(), hardware.begin(), ::tolower);
   return hardware;
 }
-
-}  // namespace
 
 //******************************************************************************
 #undef KIM_LOGGER_OBJECT_NAME
@@ -71,15 +70,14 @@ TorchMLModelDriverImplementation::TorchMLModelDriverImplementation(
   readParametersFile(modelDriverCreate, ier);
   // Load Torch Model
   // ----------------------------------------------------------------
-  if (hasSuffix(fully_qualified_model_name, ".pt2"))
+  ml_model = CreateModel(
+    hasSuffix(fully_qualified_model_name, ".pt2") ? TORCHEXPORT : TORCHSCRIPT,
+    fully_qualified_model_name,
+    device,
+    number_of_inputs);
+  if (!ml_model)
   {
-    ml_model = std::make_unique<TorchExportModel>(
-        fully_qualified_model_name, device, number_of_inputs);
-  }
-  else
-  {
-    ml_model = std::make_unique<TorchScriptModel>(
-        fully_qualified_model_name, device, number_of_inputs);
+    *ier = true;
   }
   LOG_INFORMATION("Loaded Torch model and set to eval");
   LOG_DEBUG("Read Param files");

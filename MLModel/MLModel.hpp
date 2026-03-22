@@ -2,6 +2,7 @@
 #define MLMODEL_HPP
 
 #include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -39,5 +40,14 @@ class MLModel
 
   virtual ~MLModel() = default;
 };
+
+enum MLModelTypes
+{
+  TORCHSCRIPT,
+  TORCHEXPORT
+};
+
+std::unique_ptr<MLModel> CreateModel(MLModelTypes type, std::string& fully_qualified_model_name, std::string& device, int number_of_inputs);
+
 
 #endif /* MLMODEL_HPP */

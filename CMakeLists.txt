@@ -133,13 +133,7 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 
-# --------------------------------------------------
-# Prefix paths
-# --------------------------------------------------
-message(STATUS "KIM ROOT: ${KIM_ROOT}")
-message(STATUS "TORCH ROOT: ${TORCH_ROOT}")
-
-list(APPEND CMAKE_PREFIX_PATH ${KIM_ROOT} ${TORCH_ROOT})
+list(APPEND CMAKE_PREFIX_PATH ${KIM_ROOT})
 
 # --------------------------------------------------
 # Find KIM first
@@ -150,11 +144,6 @@ find_package(KIM-API-ITEMS 2.2 REQUIRED CONFIG)
 kim_api_items_setup_before_project(ITEM_TYPE "modelDriver")
 project(TorchML_MD_173118614730_001 LANGUAGES CXX)
 kim_api_items_setup_after_project(ITEM_TYPE "modelDriver")
-
-# --------------------------------------------------
-# Find Torch AFTER project + KIM setup
-# --------------------------------------------------
-find_package(Torch REQUIRED)
 
 # --------------------------------------------------
 # Create target

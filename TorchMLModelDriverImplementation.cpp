@@ -1088,23 +1088,24 @@ void TorchMLModelDriverImplementation::unitConversion(
     KIM::TimeUnit const requestedTimeUnit,
     int * const ier)
 {
-  // KIM::LengthUnit fromLength = KIM::LENGTH_UNIT::A;
-  // KIM::EnergyUnit fromEnergy = KIM::ENERGY_UNIT::eV;
-  // KIM::ChargeUnit fromCharge = KIM::CHARGE_UNIT::e;
-  // KIM::TemperatureUnit fromTemperature = KIM::TEMPERATURE_UNIT::K;
-  // KIM::TimeUnit fromTime = KIM::TIME_UNIT::ps;
-  // double convertLength = 1.0;
+  KIM::LengthUnit fromLength = KIM::LENGTH_UNIT::A;
+  KIM::EnergyUnit fromEnergy = KIM::ENERGY_UNIT::eV;
+  KIM::ChargeUnit fromCharge = KIM::CHARGE_UNIT::e;
+  KIM::TemperatureUnit fromTemperature = KIM::TEMPERATURE_UNIT::K;
+  KIM::TimeUnit fromTime = KIM::TIME_UNIT::ps;
+  double convertLength = 1.0, convertEnergy = 1.0;
   if (requestedLengthUnit != KIM::LENGTH_UNIT::A)
   {
-    LOG_ERROR("Only Angstroms supported for length unit");
+    LOG_ERROR("Only Angstroms supported for length unit for now");
     *ier = true;
     return;
   }
   if (requestedEnergyUnit != KIM::ENERGY_UNIT::eV)
   {
-    LOG_ERROR("Only eV supported for energy unit");
+    LOG_ERROR("Only eV supported for energy unit for now");
     *ier = true;
     return;
+
   }
 
   *ier = modelDriverCreate->SetUnits(KIM::LENGTH_UNIT::A,
@@ -1112,6 +1113,14 @@ void TorchMLModelDriverImplementation::unitConversion(
                                      KIM::CHARGE_UNIT::unused,
                                      KIM::TEMPERATURE_UNIT::unused,
                                      requestedTimeUnit);
+
+  // *ier = modelDriverCreate->SetUnits(requestedLengthUnit,
+  //                                    requestedEnergyUnit,
+  //                                    KIM::CHARGE_UNIT::unused,
+  //                                    KIM::TEMPERATURE_UNIT::unused,
+  //                                    requestedTimeUnit);
+  // TODO: Needs more thought
+
 }
 
 // --------------------------------------------------------------------------------

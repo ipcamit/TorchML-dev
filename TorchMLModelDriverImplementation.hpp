@@ -73,6 +73,8 @@ class TorchMLModelDriverImplementation
   std::vector<std::int64_t> contraction_array;
 
   std::unique_ptr<MLModel> ml_model;
+  bool lengthUnitConversionRequested; //default eV and A
+  bool energyUnitConversionRequested; //default eV and A
 
 #ifdef USE_LIBDESC
   AvailableDescriptor descriptor_kind;

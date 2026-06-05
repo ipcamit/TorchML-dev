@@ -121,7 +121,7 @@ void TorchExportModel::SetInputNode(int idx,
 
 void TorchExportModel::WriteMLModel(std::string & model_path)
 {
-  std::filesystem::copy_file(model_file_path_,
-                             model_path,
-                             std::filesystem::copy_options::overwrite_existing);
+  //TODO: try and copy older model?
+  std::cerr << "The Model is of type '.pt2', CANNOT SAVE IT OR MUTATE IT\n";
+  std::cerr << "model_path: " << model_path << std::endl;
 }

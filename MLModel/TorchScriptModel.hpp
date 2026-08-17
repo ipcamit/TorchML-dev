@@ -20,7 +20,7 @@ class TorchScriptModel : public MLModel
   std::vector<torch::jit::IValue> model_inputs_;
   std::unique_ptr<torch::Device> device_;
   torch::Dtype model_precision_ = torch::kFloat64;
-  int grad_idx;
+  int grad_idx = -1;
 
   template<typename T>
   void SetInputNodeTemplate(int idx,

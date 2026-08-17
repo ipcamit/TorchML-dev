@@ -192,6 +192,14 @@ if(DEFINED ENV{KIM_MODEL_MPI_AWARE} AND "$ENV{KIM_MODEL_MPI_AWARE}" STREQUAL "ye
 endif()
 
 # --------------------------------------------------
+# Optional: Disable graph (GNN) preprocessing
+# --------------------------------------------------
+if(DEFINED ENV{KIM_MODEL_DISABLE_GRAPH})
+    message(STATUS "Graph preprocessing disabled via KIM_MODEL_DISABLE_GRAPH")
+    target_compile_definitions(${PROJECT_NAME} PRIVATE KIM_MODEL_DISABLE_GRAPH)
+endif()
+
+# --------------------------------------------------
 # Subdirectory
 # --------------------------------------------------
 add_subdirectory(MLModel)

@@ -8,9 +8,10 @@
 #include <string>
 #include <vector>
 
+#include <unistd.h>
+
 #ifdef USE_MPI
 #include <mpi.h>
-#include <unistd.h>
 #endif
 
 namespace torch_utils {

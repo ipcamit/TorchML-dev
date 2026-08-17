@@ -34,6 +34,12 @@ void TorchScriptModel::Run(double * energy,
 
   if (backprop)
   {
+    if (grad_idx < 0 || grad_idx >= static_cast<int>(model_inputs_.size()))
+    {
+      throw std::runtime_error(
+          "Backpropagation requested but no input was marked with "
+          "requires_grad (grad_idx = " + std::to_string(grad_idx) + ").");
+    }
     energy_tensor.backward();
     forces_tensor = -model_inputs_[grad_idx].toTensor().grad();
   }
@@ -93,9 +99,6 @@ TorchScriptModel::TorchScriptModel(std::string & model_file_path,
               << model_file_path << std::endl;
     throw;
   }
-
-  device_ = std::make_unique<torch::Device>(
-      torch_utils::SetExecutionDevice(device_name));
 
   module_.to(*device_);
   module_.to(model_precision_);

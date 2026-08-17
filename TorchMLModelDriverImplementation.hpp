@@ -21,6 +21,8 @@
 using namespace Descriptor;
 #endif
 
+enum class PreprocessingMode { None, Descriptor, Graph };
+
 class TorchMLModelDriverImplementation
 {
  public:
@@ -28,7 +30,7 @@ class TorchMLModelDriverImplementation
   double influence_distance, cutoff_distance;
   int n_elements, n_layers;
   std::vector<std::string> elements_list;
-  std::string preprocessing;
+  PreprocessingMode preprocessing = PreprocessingMode::None;
   std::string model_name;
   bool returns_forces;
   std::string descriptor_name = "None";
@@ -73,6 +75,8 @@ class TorchMLModelDriverImplementation
   std::vector<std::int64_t> contraction_array;
 
   std::unique_ptr<MLModel> ml_model;
+  KIM::EnergyUnit model_energy_unit_ = KIM::ENERGY_UNIT::eV;
+  KIM::LengthUnit model_length_unit_ = KIM::LENGTH_UNIT::A;
   bool lengthUnitConversionRequested; //default eV and A
   bool energyUnitConversionRequested; //default eV and A
 
@@ -87,16 +91,18 @@ class TorchMLModelDriverImplementation
   std::vector<double> descriptor_array;
   std::vector<std::vector<std::int64_t> > graph_edge_indices;
 
-  void
+  int
   updateNeighborList(KIM::ModelComputeArguments const * modelComputeArguments);
 
-  void
+  int
   setDefaultInputs(const KIM::ModelComputeArguments * modelComputeArguments);
 
-  void
+  int
   setDescriptorInputs(const KIM::ModelComputeArguments * modelComputeArguments);
 
-  void setGraphInputs(const KIM::ModelComputeArguments * modelComputeArguments);
+  int setGraphInputs(const KIM::ModelComputeArguments * modelComputeArguments);
+
+  int setGraphInputsFast(const KIM::ModelComputeArguments * modelComputeArguments);
 
   void readParametersFile(KIM::ModelDriverCreate * modelDriverCreate,
                           int * ier);
@@ -116,14 +122,14 @@ class TorchMLModelDriverImplementation
   registerFunctionPointers(KIM::ModelDriverCreate * modelDriverCreate,
                            int * ier);
 
-  void
+  int
   preprocessInputs(KIM::ModelComputeArguments const * modelComputeArguments);
 
-  void postprocessOutputs(KIM::ModelComputeArguments const *);
+  int postprocessOutputs(KIM::ModelComputeArguments const *);
 
-  void Run(KIM::ModelComputeArguments const * modelComputeArguments);
+  int Run(KIM::ModelComputeArguments const * modelComputeArguments);
 
-  void contributingAtomCounts(
+  int contributingAtomCounts(
       KIM::ModelComputeArguments const * modelComputeArguments);
 };
 

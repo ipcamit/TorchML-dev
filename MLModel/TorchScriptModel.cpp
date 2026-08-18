@@ -140,6 +140,21 @@ void TorchScriptModel::SetInputNode(int idx,
   SetInputNodeTemplate(idx, data, size, requires_grad, clone);
 }
 
+void TorchScriptModel::SetAndScaleInputNode(int model_input_index,
+                                            double * input,
+                                            std::vector<std::int64_t> & size,
+                                            bool requires_grad,
+                                            bool clone,
+                                            double scale_factor)
+{
+   torch::Tensor scale_tensor = torch::tensor(scale_factor, torch::TensorOptions().dtype(model_precision_));
+   scale_tensor = scale_tensor.to(*device_);
+   SetInputNodeTemplate(model_input_index, input, size, requires_grad, clone);
+   model_inputs_[model_input_index] = model_inputs_[model_input_index].toTensor() * scale_tensor;
+  // on device multiplication, no need to copy back to CPU, should be faster
+  // any better fix?
+}
+
 void TorchScriptModel::WriteMLModel(std::string & model_path)
 {
   module_.save(model_path);

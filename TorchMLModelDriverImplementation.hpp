@@ -77,6 +77,11 @@ class TorchMLModelDriverImplementation
   std::unique_ptr<MLModel> ml_model;
   KIM::EnergyUnit model_energy_unit_ = KIM::ENERGY_UNIT::eV;
   KIM::LengthUnit model_length_unit_ = KIM::LENGTH_UNIT::A;
+  double energy_factor = 1.0;
+  double force_factor = 1.0;
+  double length_factor = 1.0;
+  std::shared_ptr<double[]> positions_buffer;
+  std::shared_ptr<double[]> force_buffer;
   bool lengthUnitConversionRequested; //default eV and A
   bool energyUnitConversionRequested; //default eV and A
 
@@ -102,13 +107,15 @@ class TorchMLModelDriverImplementation
 
   int setGraphInputs(const KIM::ModelComputeArguments * modelComputeArguments);
 
+#if 0  // Held for later reintroduction after unit conversion support.
   int setGraphInputsFast(const KIM::ModelComputeArguments * modelComputeArguments);
+#endif
 
   void readParametersFile(KIM::ModelDriverCreate * modelDriverCreate,
                           int * ier);
 
 
-  static void unitConversion(KIM::ModelDriverCreate * modelDriverCreate,
+  void unitConversion(KIM::ModelDriverCreate * modelDriverCreate,
                              KIM::LengthUnit requestedLengthUnit,
                              KIM::EnergyUnit requestedEnergyUnit,
                              KIM::ChargeUnit requestedChargeUnit,

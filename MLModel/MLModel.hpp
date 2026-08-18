@@ -30,6 +30,15 @@ class MLModel
                             bool clone)
       = 0;
 
+  virtual void SetAndScaleInputNode(int model_input_index,
+                            double * input,
+                            std::vector<std::int64_t> & size,
+                            bool requires_grad,
+                            bool clone,
+                            double scale_factor)
+      = 0;
+
+
   virtual void Run(double * energy,
                    double * partial_energy,
                    double * forces,

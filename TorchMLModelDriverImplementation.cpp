@@ -23,20 +23,6 @@ inline bool hasSuffix(std::string const & value, std::string const & suffix)
                 == 0;
 }
 
-inline std::string requestedHardwareTag(std::string const & requested_device)
-{
-  std::string hardware = requested_device.empty() ? "cpu" : requested_device;
-  auto const colon_pos = hardware.find(':');
-  if (colon_pos != std::string::npos)
-  {
-    hardware = hardware.substr(0, colon_pos);
-  }
-
-  std::transform(
-      hardware.begin(), hardware.end(), hardware.begin(), ::tolower);
-  return hardware;
-}
-
 // Safe reader: skip blank lines and #-comments. Returns false on EOF.
 inline bool readNextNonComment(std::istream & file, std::string & line)
 {
@@ -47,61 +33,6 @@ inline bool readNextNonComment(std::istream & file, std::string & line)
   return false;
 }
 
-inline std::string trim(std::string const & value)
-{
-  auto const first
-      = std::find_if_not(value.begin(), value.end(), [](unsigned char c) {
-          return std::isspace(c);
-        });
-  if (first == value.end()) return {};
-
-  auto const last
-      = std::find_if_not(value.rbegin(), value.rend(), [](unsigned char c) {
-          return std::isspace(c);
-        }).base();
-  return std::string(first, last);
-}
-
-inline std::string normalizedUnitName(std::string const & value)
-{
-  std::string normalized = trim(value);
-  std::transform(normalized.begin(),
-                 normalized.end(),
-                 normalized.begin(),
-                 [](unsigned char c) {
-                   return static_cast<char>(std::tolower(c));
-                 });
-  return normalized;
-}
-
-inline bool parseEnergyUnit(std::string const & value, KIM::EnergyUnit & unit)
-{
-  std::string const normalized = normalizedUnitName(value);
-  if (normalized == "amu_a2_per_ps2")
-  {
-    unit = KIM::ENERGY_UNIT::amu_A2_per_ps2;
-  }
-  else if (normalized == "erg") { unit = KIM::ENERGY_UNIT::erg; }
-  else if (normalized == "ev") { unit = KIM::ENERGY_UNIT::eV; }
-  else if (normalized == "hartree") { unit = KIM::ENERGY_UNIT::Hartree; }
-  else if (normalized == "j") { unit = KIM::ENERGY_UNIT::J; }
-  else if (normalized == "kcal_mol") { unit = KIM::ENERGY_UNIT::kcal_mol; }
-  else { return false; }
-  return true;
-}
-
-inline bool parseLengthUnit(std::string const & value, KIM::LengthUnit & unit)
-{
-  std::string const normalized = normalizedUnitName(value);
-  if (normalized == "unused") { unit = KIM::LENGTH_UNIT::unused; }
-  else if (normalized == "a") { unit = KIM::LENGTH_UNIT::A; }
-  else if (normalized == "bohr") { unit = KIM::LENGTH_UNIT::Bohr; }
-  else if (normalized == "cm") { unit = KIM::LENGTH_UNIT::cm; }
-  else if (normalized == "m") { unit = KIM::LENGTH_UNIT::m; }
-  else if (normalized == "nm") { unit = KIM::LENGTH_UNIT::nm; }
-  else { return false; }
-  return true;
-}
 
 //******************************************************************************
 #undef KIM_LOGGER_OBJECT_NAME
@@ -354,7 +285,7 @@ int TorchMLModelDriverImplementation::preprocessInputs(
 #endif
       break;
     case PreprocessingMode::Graph:
-      return setGraphInputsFast(modelComputeArguments);
+      return setGraphInputs(modelComputeArguments);
   }
   return false;
 }
@@ -414,6 +345,7 @@ int TorchMLModelDriverImplementation::postprocessOutputs(
                   *numberOfParticlesPointer * 3 * sizeof(double));
     }
     else { ml_model->Run(energy, partialEnergy, forces, !returns_forces); }
+
   }
   else
   {  // descriptor if-else
@@ -472,6 +404,28 @@ int TorchMLModelDriverImplementation::postprocessOutputs(
     }
 #endif
   }  // descriptor if else
+
+  // energy conversion and fix for non-zero non-contributing particle energy.
+  if (energyUnitConversionRequested)
+  {
+    if (energy) { *energy *= energy_factor; }
+    if (partialEnergy)
+    {
+      for (int i = 0; i < *numberOfParticlesPointer; i++)
+      {
+        if (particleContributing[i] == 1) { partialEnergy[i] *= energy_factor; }
+        else { partialEnergy[i] = 0.0; }
+      }
+    }
+  }
+
+  if (lengthUnitConversionRequested && forces)
+  {
+    for (int i = 0; i < *numberOfParticlesPointer * 3; i++)
+    {
+      forces[i] *= force_factor;
+    }
+  }
   return false;
 }
 
@@ -549,9 +503,7 @@ int TorchMLModelDriverImplementation::setDefaultInputs(
   species_atomic_number.assign(*numberOfParticlesPointer, 0);
   contraction_array.assign(*numberOfParticlesPointer, 0);
 
-  bool map_species_z = std::getenv("KIM_MODEL_ELEMENTS_MAP") != nullptr;
-
-  if (map_species_z)
+  if (map_species_to_z)
   {
     auto const z_map_size = static_cast<int>(z_map.size());
     for (int i = 0; i < *numberOfParticlesPointer; i++)
@@ -561,7 +513,7 @@ int TorchMLModelDriverImplementation::setDefaultInputs(
       {
         LOG_ERROR("Species code " + std::to_string(code)
                   + " out of range [0, " + std::to_string(z_map_size) + ")");
-        return;
+        return true;
       }
       species_atomic_number[i] = z_map[code];
       contraction_array[i] = particleContributing[i];
@@ -779,12 +731,6 @@ int TorchMLModelDriverImplementation::setGraphInputs(
     for (int i = 0; i < *numberOfParticlesPointer; i++)
     {
       int code = particleSpeciesCodes[i];
-      if (code < 0 || code >= z_map_size)
-      {
-        LOG_ERROR("Species code " + std::to_string(code)
-                  + " out of range [0, " + std::to_string(z_map_size) + ")");
-        return;
-      }
       species_atomic_number[i] = z_map[code];
     }
   }
@@ -809,7 +755,11 @@ int TorchMLModelDriverImplementation::setGraphInputs(
   int numberOfParticlePointers = *numberOfParticlesPointer;
   shape.clear();
   shape = {numberOfParticlePointers, 3};
-  ml_model->SetInputNode(1, coordinates, shape, true, true);
+
+  if (lengthUnitConversionRequested)
+    ml_model->SetAndScaleInputNode(1, coordinates, shape, true, true, length_factor);
+  else
+    ml_model->SetInputNode(1, coordinates, shape, true, true);
 
   shape.clear();
   shape = {numberOfParticlePointers};
@@ -839,7 +789,9 @@ int TorchMLModelDriverImplementation::setGraphInputs(
 // Replaces unordered_set<CantorPairing> with vector<pair> + sort + unique.
 // Eliminates per-insertion hash overhead and improves cache locality.
 // Produces identical edge sets to setGraphInputs().
+// AI assisted speed up
 // -----------------------------------------------------------------------------
+#if 0  // Held for later reintroduction
 #undef KIM_LOGGER_OBJECT_NAME
 #define KIM_LOGGER_OBJECT_NAME modelComputeArguments
 
@@ -992,6 +944,7 @@ int TorchMLModelDriverImplementation::setGraphInputsFast(
 #endif
   return false;
 }
+#endif
 
 // --------------------------------------------------------------------------------
 #undef KIM_LOGGER_OBJECT_NAME
@@ -1193,10 +1146,21 @@ void TorchMLModelDriverImplementation::readParametersFile(
     }
 
     auto const exec_device_env = std::getenv("KIM_MODEL_EXECUTION_DEVICE");
-    std::string const requested_device
-        = exec_device_env ? std::string {exec_device_env} : std::string {"cpu"};
-    std::string const requested_hardware
-        = requestedHardwareTag(requested_device);
+    std::string requested_hardware
+        = exec_device_env && exec_device_env[0] != '\0'
+              ? std::string {exec_device_env}
+              : std::string {"cpu"};
+    auto const colon_pos = requested_hardware.find(':');
+    if (colon_pos != std::string::npos)
+    {
+      requested_hardware.erase(colon_pos);
+    }
+    std::transform(requested_hardware.begin(),
+                   requested_hardware.end(),
+                   requested_hardware.begin(),
+                   [](unsigned char c) {
+                     return static_cast<char>(std::tolower(c));
+                   });
 
     bool const has_pt2_list
         = std::any_of(model_names_from_param.begin(),
@@ -1271,7 +1235,7 @@ void TorchMLModelDriverImplementation::readParametersFile(
       *ier = true;
       return;
     }
-    // number of strings
+
     number_of_inputs = std::stoi(placeholder_string);
 
     if (preprocessing == PreprocessingMode::Descriptor)
@@ -1315,61 +1279,89 @@ void TorchMLModelDriverImplementation::readParametersFile(
 #endif
     }
 
-    // Optional trailing model-unit block. The first value is the energy unit
-    // and the second value, when present, is the length unit. Blank lines and
-    // comments are ignored. Defaults are eV and A, respectively.
-    std::vector<std::string> unit_lines;
-    bool legacy_descriptor_marker = false;
-    while (std::getline(file_ptr, placeholder_string))
+    // Optional model units at the end of the file. Defaults are eV and A.
+    // blank line
+    std::getline(file_ptr, placeholder_string);
+    // Ignore comments
+    if (readNextNonComment(file_ptr, placeholder_string))
     {
-      std::string const value = trim(placeholder_string);
-      if (value.empty()) continue;
-      if (value.front() == '#')
+      std::string unit_name;
+      std::istringstream energy_unit_stream(placeholder_string);
+      energy_unit_stream >> unit_name;
+      std::transform(unit_name.begin(),
+                     unit_name.end(),
+                     unit_name.begin(),
+                     [](unsigned char c) {
+                       return static_cast<char>(std::tolower(c));
+                     });
+
+      bool has_unit_block = true;
+      if (preprocessing != PreprocessingMode::Descriptor
+          && unit_name == "none")
       {
-        legacy_descriptor_marker
-            = preprocessing != PreprocessingMode::Descriptor
-              && normalizedUnitName(value.substr(1)).find("descriptor")
-                     != std::string::npos;
-        continue;
+        // Ignore the legacy trailing descriptor value.
+        std::getline(file_ptr, placeholder_string);
+        if (readNextNonComment(file_ptr, placeholder_string))
+        {
+          unit_name.clear();
+          std::istringstream energy_unit_stream(placeholder_string);
+          energy_unit_stream >> unit_name;
+          std::transform(unit_name.begin(),
+                         unit_name.end(),
+                         unit_name.begin(),
+                         [](unsigned char c) {
+                           return static_cast<char>(std::tolower(c));
+                         });
+        }
+        else
+        {
+          has_unit_block = false;
+        }
       }
 
-      if (legacy_descriptor_marker && unit_lines.empty()
-          && normalizedUnitName(value) == "none")
+      if (has_unit_block)
       {
-        legacy_descriptor_marker = false;
-        continue;
+        if (unit_name == "amu_a2_per_ps2"){model_energy_unit_ = KIM::ENERGY_UNIT::amu_A2_per_ps2;}
+        else if (unit_name == "erg"){model_energy_unit_ = KIM::ENERGY_UNIT::erg;}
+        else if (unit_name == "ev"){model_energy_unit_ = KIM::ENERGY_UNIT::eV;}
+        else if (unit_name == "hartree"){model_energy_unit_ = KIM::ENERGY_UNIT::Hartree;}
+        else if (unit_name == "j"){model_energy_unit_ = KIM::ENERGY_UNIT::J;}
+        else if (unit_name == "kcal_mol"){model_energy_unit_ = KIM::ENERGY_UNIT::kcal_mol;}
+        else
+        {
+          LOG_ERROR("Unsupported model energy unit '" + unit_name + "'");
+          *ier = true;
+          return;
+        }
+
+        if (readNextNonComment(file_ptr, placeholder_string))
+        {
+          unit_name.clear();
+          std::istringstream length_unit_stream(placeholder_string);
+          length_unit_stream >> unit_name;
+          std::transform(unit_name.begin(),
+                         unit_name.end(),
+                         unit_name.begin(),
+                         [](unsigned char c) {
+                           return static_cast<char>(std::tolower(c));
+                         });
+
+          if (unit_name == "unused"){model_length_unit_ = KIM::LENGTH_UNIT::unused;}
+          else if (unit_name == "a"){model_length_unit_ = KIM::LENGTH_UNIT::A;}
+          else if (unit_name == "bohr"){model_length_unit_ = KIM::LENGTH_UNIT::Bohr;}
+          else if (unit_name == "cm"){model_length_unit_ = KIM::LENGTH_UNIT::cm;}
+          else if (unit_name == "m"){model_length_unit_ = KIM::LENGTH_UNIT::m;}
+          else if (unit_name == "nm"){model_length_unit_ = KIM::LENGTH_UNIT::nm;}
+          else
+          {
+            LOG_ERROR("Unsupported model length unit '" + unit_name + "'");
+            *ier = true;
+            return;
+          }
+        }
       }
-
-      legacy_descriptor_marker = false;
-      unit_lines.push_back(value);
     }
 
-    if (unit_lines.size() > 2)
-    {
-      LOG_ERROR("Too many values in optional model-unit block; expected "
-                "energy unit followed by optional length unit");
-      *ier = true;
-      return;
-    }
-
-    if (!unit_lines.empty()
-        && !parseEnergyUnit(unit_lines[0], model_energy_unit_))
-    {
-      LOG_ERROR("Unsupported model energy unit '" + unit_lines[0]
-                + "'. Supported values: amu_A2_per_ps2, erg, eV, Hartree, J, "
-                  "kcal_mol");
-      *ier = true;
-      return;
-    }
-
-    if (unit_lines.size() == 2
-        && !parseLengthUnit(unit_lines[1], model_length_unit_))
-    {
-      LOG_ERROR("Unsupported model length unit '" + unit_lines[1]
-                + "'. Supported values: unused, A, Bohr, cm, m, nm");
-      *ier = true;
-      return;
-    }
   }
   else
   {
@@ -1472,28 +1464,72 @@ void TorchMLModelDriverImplementation::unitConversion(
     KIM::TimeUnit const requestedTimeUnit,
     int * const ier)
 {
-  KIM::LengthUnit fromLength = KIM::LENGTH_UNIT::A;
-  KIM::EnergyUnit fromEnergy = KIM::ENERGY_UNIT::eV;
-  KIM::ChargeUnit fromCharge = KIM::CHARGE_UNIT::e;
-  KIM::TemperatureUnit fromTemperature = KIM::TEMPERATURE_UNIT::K;
-  KIM::TimeUnit fromTime = KIM::TIME_UNIT::ps;
-  double convertLength = 1.0, convertEnergy = 1.0;
-  if (requestedLengthUnit != KIM::LENGTH_UNIT::A)
-  {
-    LOG_ERROR("Only Angstroms supported for length unit for now");
-    *ier = true;
-    return;
-  }
-  if (requestedEnergyUnit != KIM::ENERGY_UNIT::eV)
-  {
-    LOG_ERROR("Only eV supported for energy unit for now");
-    *ier = true;
-    return;
+  KIM::LengthUnit fromLength = model_length_unit_;
+  KIM::EnergyUnit fromEnergy = model_energy_unit_;
 
+  // Discuss with Ilia, are there any models that use charge, temperature or time units? If yes, we need to handle them here
+  KIM::ChargeUnit fromCharge = KIM::CHARGE_UNIT::unused;
+  KIM::TemperatureUnit fromTemperature = KIM::TEMPERATURE_UNIT::unused;
+  KIM::TimeUnit fromTime = KIM::TIME_UNIT::unused;
+  length_factor = 1.0;
+  energy_factor = 1.0;
+  force_factor = 1.0;
+
+  if (fromLength != requestedLengthUnit)
+  {
+    *ier = KIM::ModelDriverCreate::ConvertUnit(fromLength,
+                                            fromEnergy,
+                                            fromCharge,
+                                            fromTemperature,
+                                            fromTime,
+                                            requestedLengthUnit,
+                                            requestedEnergyUnit,
+                                            requestedChargeUnit,
+                                            requestedTemperatureUnit,
+                                            requestedTimeUnit,
+                                            1.0,
+                                            0.0,
+                                            0.0,
+                                            0.0,
+                                            0.0,
+                                            &length_factor);
+    if (*ier)
+    {
+      LOG_ERROR("Error converting length units");
+      return;
+    }
+    force_factor = 1.0 / length_factor;
+    lengthUnitConversionRequested = true;
   }
 
-  *ier = modelDriverCreate->SetUnits(KIM::LENGTH_UNIT::A,
-                                     KIM::ENERGY_UNIT::eV,
+  if (fromEnergy != requestedEnergyUnit)
+  {
+    *ier = KIM::ModelDriverCreate::ConvertUnit(fromLength,
+                                            fromEnergy,
+                                            fromCharge,
+                                            fromTemperature,
+                                            fromTime,
+                                            requestedLengthUnit,
+                                            requestedEnergyUnit,
+                                            requestedChargeUnit,
+                                            requestedTemperatureUnit,
+                                            requestedTimeUnit,
+                                            0.0,
+                                            1.0,
+                                            0.0,
+                                            0.0,
+                                            0.0,
+                                            &energy_factor);
+    if (*ier)
+    {
+      LOG_ERROR("Error converting energy units");
+      return;
+    }
+    force_factor *= energy_factor;
+    energyUnitConversionRequested = true;
+  }
+  *ier = modelDriverCreate->SetUnits(requestedLengthUnit,
+                                     requestedEnergyUnit,
                                      KIM::CHARGE_UNIT::unused,
                                      KIM::TEMPERATURE_UNIT::unused,
                                      requestedTimeUnit);
@@ -1642,7 +1678,6 @@ int sym_to_z(std::string & sym)
   auto it = element_map.find(sym);
   if (it == element_map.end())
   {
-    LOG_ERROR("Unknown element symbol '" + sym + "'");
     return -1;
   }
   return it->second;

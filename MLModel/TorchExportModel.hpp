@@ -74,6 +74,13 @@ class TorchExportModel : public MLModel
                     bool requires_grad,
                     bool clone) override;
 
+  void SetAndScaleInputNode(int model_input_index,
+                           double * input,
+                           std::vector<std::int64_t> & size,
+                           bool requires_grad,
+                           bool clone,
+                           double scale_factor) override;
+
   void Run(double * energy,
            double * partial_energy,
            double * forces,

@@ -727,7 +727,6 @@ int TorchMLModelDriverImplementation::setGraphInputs(
 
   if (map_species_to_z)
   {
-    auto const z_map_size = static_cast<int>(z_map.size());
     for (int i = 0; i < *numberOfParticlesPointer; i++)
     {
       int code = particleSpeciesCodes[i];

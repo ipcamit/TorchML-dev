@@ -119,9 +119,24 @@ void TorchExportModel::SetInputNode(int idx,
   SetInputNodeTemplate(idx, data, size, requires_grad, clone);
 }
 
+void TorchExportModel::SetAndScaleInputNode(int idx,
+                                    double * const data,
+                                    std::vector<std::int64_t> & size,
+                                    bool requires_grad,
+                                    bool clone,
+                                    double scale_factor)
+{
+
+  torch::Tensor scale_tensor = torch::tensor(scale_factor, torch::TensorOptions().dtype(model_precision_).device(*device_));
+  scale_tensor = scale_tensor.to(*device_);
+  SetInputNodeTemplate(idx, data, size, requires_grad, clone);
+  model_inputs_[idx] = model_inputs_[idx] * scale_tensor;
+}
+
 void TorchExportModel::WriteMLModel(std::string & model_path)
 {
   //TODO: try and copy older model?
   std::cerr << "The Model is of type '.pt2', CANNOT SAVE IT OR MUTATE IT\n";
   std::cerr << "model_path: " << model_path << std::endl;
 }
+

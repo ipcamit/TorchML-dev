@@ -12,16 +12,58 @@ void TorchExportModel::Run(double * energy,
                            bool backprop)
 {
   auto outputs = loader_->run(model_inputs_);
-
   if (outputs.empty())
   {
     throw std::runtime_error("TorchExport model returned no outputs.");
   }
 
-  torch::Tensor partial_energy_tensor = outputs[0];
-  torch::Tensor energy_tensor = partial_energy_tensor.sum();
+  auto partial_energy_tensor = outputs[0];
 
-  if (energy) { *energy = energy_tensor.to(torch::kCPU).item<double>(); }
+  // Expand particle energies to full particle order.
+  // The final input uses 0 for contributing particles.
+  if (partial_energy_tensor.dim() != 0 && grad_idx_ >= 0
+      && model_inputs_.size() > 1)
+  {
+    auto const particle_count = model_inputs_[grad_idx_].size(0);
+    auto const values = partial_energy_tensor.reshape({-1});
+    auto const mask = model_inputs_.back().reshape({-1}).eq(0);
+
+    if (mask.numel() != particle_count)
+    {
+      throw std::runtime_error(
+          "Contribution mask length does not match particle count.");
+    }
+
+    if (values.numel() == particle_count)
+    {
+      // Full output: zero non-contributing particle energies.
+      partial_energy_tensor
+          = values * mask.to(values.scalar_type());
+    }
+    else
+    {
+      auto const contributing_count
+          = mask.sum().item<std::int64_t>();
+
+      if (values.numel() != contributing_count)
+      {
+        throw std::runtime_error(
+            "Unexpected number of particle energies returned by model.");
+      }
+
+      // Packed output: scatter into the full particle ordering.
+      partial_energy_tensor
+          = torch::zeros({particle_count}, values.options())
+                .masked_scatter(mask, values);
+    }
+  }
+
+  auto const energy_tensor = partial_energy_tensor.sum();
+
+  if (energy)
+  {
+    *energy = energy_tensor.to(torch::kCPU).item<double>();
+  }
 
   if (partial_energy)
   {
@@ -31,41 +73,38 @@ void TorchExportModel::Run(double * energy,
           "Requested partial energy, but model only provided a scalar.");
     }
 
-    std::memcpy(
-        partial_energy,
-        partial_energy_tensor.to(torch::kFloat64)
-            .to(torch::kCPU)
-            .contiguous()
-            .data_ptr<double>(),
-        partial_energy_tensor.numel() * sizeof(double));
+    auto const cpu_particle_energy
+        = partial_energy_tensor.to(torch::kFloat64)
+              .to(torch::kCPU)
+              .contiguous();
+
+    std::memcpy(partial_energy,
+                cpu_particle_energy.data_ptr<double>(),
+                cpu_particle_energy.numel() * sizeof(double));
   }
 
   if (forces)
   {
-    if (outputs.size() > 1)
-    {
-      torch::Tensor forces_tensor = outputs[1];
-      std::memcpy(forces,
-                  forces_tensor.to(torch::kFloat64)
-                      .to(torch::kCPU)
-                      .contiguous()
-                      .data_ptr<double>(),
-                  forces_tensor.numel() * sizeof(double));
-    }
-    else if (backprop)
+    if (outputs.size() <= 1)
     {
       throw std::runtime_error(
-          "Forces requested with backpropagation for TorchExport model, but "
-          "this model did not provide gradient output.");
+          backprop
+              ? "Forces requested with backpropagation, but model did not "
+                "provide gradient output."
+              : "Forces requested, but model did not provide force output.");
     }
-    else
-    {
-      throw std::runtime_error(
-          "Forces requested, but TorchExport model did not provide force "
-          "output.");
-    }
+
+    auto const cpu_forces
+        = outputs[1].to(torch::kFloat64)
+              .to(torch::kCPU)
+              .contiguous();
+
+    std::memcpy(forces,
+                cpu_forces.data_ptr<double>(),
+                cpu_forces.numel() * sizeof(double));
   }
 }
+
 
 TorchExportModel::TorchExportModel(std::string & model_file_path,
                                    std::string & device_name,

@@ -82,8 +82,8 @@ class TorchMLModelDriverImplementation
   double length_factor = 1.0;
   std::shared_ptr<double[]> positions_buffer;
   std::shared_ptr<double[]> force_buffer;
-  bool lengthUnitConversionRequested; //default eV and A
-  bool energyUnitConversionRequested; //default eV and A
+  bool lengthUnitConversionRequested = false; // default A
+  bool energyUnitConversionRequested = false; // default eV
 
 #ifdef USE_LIBDESC
   AvailableDescriptor descriptor_kind;

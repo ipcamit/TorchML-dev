@@ -205,6 +205,9 @@ int TorchMLModelDriverImplementation::Refresh(
 }
 
 //******************************************************************************
+#undef KIM_LOGGER_OBJECT_NAME
+#define KIM_LOGGER_OBJECT_NAME modelComputeArguments
+
 int TorchMLModelDriverImplementation::Compute(
     KIM::ModelComputeArguments const * const modelComputeArguments)
 {
@@ -214,7 +217,12 @@ int TorchMLModelDriverImplementation::Compute(
   }
   catch (const std::exception & e)
   {
-    std::cerr << "TorchML Compute error: " << e.what() << std::endl;
+    LOG_ERROR(std::string("TorchML Compute error: ") + e.what());
+    return true;
+  }
+  catch (...)
+  {
+    LOG_ERROR("TorchML Compute failed with an unknown exception");
     return true;
   }
 }
@@ -332,17 +340,33 @@ int TorchMLModelDriverImplementation::postprocessOutputs(
   //   &virial);
   if (ier) return true;
 
+  // Descriptor models return a dense array containing only contributing
+  // particles. Keep that packed result separate until it can be scattered
+  // with the authoritative KIM contribution mask.
+  std::vector<double> descriptorParticleEnergy;
+  if (preprocessing == PreprocessingMode::Descriptor && partialEnergy)
+  {
+    descriptorParticleEnergy.resize(n_contributing_atoms);
+  }
+
   if (preprocessing != PreprocessingMode::Descriptor)
   {
     if (*numberOfParticlesPointer == 1)
     {  // padded single particle GNN
-      auto forces_padded
-          = std::make_unique<double[]>((*numberOfParticlesPointer + 1) * 3);
+      std::unique_ptr<double[]> forces_padded;
+      if (forces)
+      {
+        forces_padded
+            = std::make_unique<double[]>((*numberOfParticlesPointer + 1) * 3);
+      }
       ml_model->Run(
           energy, partialEnergy, forces_padded.get(), !returns_forces);
-      std::memcpy(forces,
-                  forces_padded.get(),
-                  *numberOfParticlesPointer * 3 * sizeof(double));
+      if (forces)
+      {
+        std::memcpy(forces,
+                    forces_padded.get(),
+                    *numberOfParticlesPointer * 3 * sizeof(double));
+      }
     }
     else { ml_model->Run(energy, partialEnergy, forces, !returns_forces); }
 
@@ -350,10 +374,15 @@ int TorchMLModelDriverImplementation::postprocessOutputs(
   else
   {  // descriptor if-else
 #ifdef USE_LIBDESC
+    double * const modelPartialEnergy
+        = partialEnergy ? descriptorParticleEnergy.data() : nullptr;
+    double * const modelCoordinates
+        = lengthUnitConversionRequested ? positions_buffer.get() : coordinates;
     auto neg_dE_dzeta
         = std::make_unique<double[]>(n_contributing_atoms * descriptor->width);
 
-    ml_model->Run(energy, partialEnergy, neg_dE_dzeta.get(), !returns_forces);
+    ml_model->Run(
+        energy, modelPartialEnergy, neg_dE_dzeta.get(), !returns_forces);
     // only do below if forces are needed
     if (forces && neg_dE_dzeta)
     {  // forces were requested and model returned valid grad
@@ -367,7 +396,7 @@ int TorchMLModelDriverImplementation::postprocessOutputs(
       std::fill(force_accessor.get(),
                 force_accessor.get() + *numberOfParticlesPointer * 3,
                 0.0);
-      for (int i = 0; i < n_contributing_atoms; i++)
+      for (int i = 0; i < *numberOfParticlesPointer; i++)
       {
         if (particleContributing[i] != 1) { continue; }
         n_neigh = num_neighbors_[contributing_particle_ptr];
@@ -382,7 +411,7 @@ int TorchMLModelDriverImplementation::postprocessOutputs(
             particleSpeciesCodes,
             n_list.data(),
             n_neigh,
-            coordinates,
+            modelCoordinates,
             force_accessor.get(),
             descriptor_array.data() + (contributing_particle_ptr * width),
             neg_dE_dzeta.get() + (contributing_particle_ptr * width),
@@ -405,7 +434,23 @@ int TorchMLModelDriverImplementation::postprocessOutputs(
 #endif
   }  // descriptor if else
 
-  // energy conversion and fix for non-zero non-contributing particle energy.
+  if (preprocessing == PreprocessingMode::Descriptor && partialEnergy)
+  {
+    std::fill(partialEnergy,
+              partialEnergy + *numberOfParticlesPointer,
+              0.0);
+    std::size_t contributingParticleIndex = 0;
+    for (int i = 0; i < *numberOfParticlesPointer; i++)
+    {
+      if (particleContributing[i] == 1)
+      {
+        partialEnergy[i]
+            = descriptorParticleEnergy[contributingParticleIndex];
+        contributingParticleIndex++;
+      }
+    }
+  }
+
   if (energyUnitConversionRequested)
   {
     if (energy) { *energy *= energy_factor; }
@@ -413,13 +458,13 @@ int TorchMLModelDriverImplementation::postprocessOutputs(
     {
       for (int i = 0; i < *numberOfParticlesPointer; i++)
       {
-        if (particleContributing[i] == 1) { partialEnergy[i] *= energy_factor; }
-        else { partialEnergy[i] = 0.0; }
+        partialEnergy[i] *= energy_factor;
       }
     }
   }
 
-  if (lengthUnitConversionRequested && forces)
+  if ((lengthUnitConversionRequested || energyUnitConversionRequested)
+      && forces) // even if energy is scaled
   {
     for (int i = 0; i < *numberOfParticlesPointer * 3; i++)
     {
@@ -501,7 +546,9 @@ int TorchMLModelDriverImplementation::setDefaultInputs(
   if (updateNeighborList(modelComputeArguments)) return true;
 
   species_atomic_number.assign(*numberOfParticlesPointer, 0);
-  contraction_array.assign(*numberOfParticlesPointer, 0);
+  // Model-facing contribution masks consistently use graph convention:
+  // 0 = contributing particle, 1 = non-contributing particle.
+  contraction_array.assign(*numberOfParticlesPointer, 1);
 
   if (map_species_to_z)
   {
@@ -516,7 +563,6 @@ int TorchMLModelDriverImplementation::setDefaultInputs(
         return true;
       }
       species_atomic_number[i] = z_map[code];
-      contraction_array[i] = particleContributing[i];
     }
   }
   else
@@ -524,8 +570,12 @@ int TorchMLModelDriverImplementation::setDefaultInputs(
     for (int i = 0; i < *numberOfParticlesPointer; i++)
     {
       species_atomic_number[i] = particleSpeciesCodes[i];
-      contraction_array[i] = particleContributing[i];
     }
+  }
+
+  for (int i = 0; i < *numberOfParticlesPointer; i++)
+  {
+    contraction_array[i] = particleContributing[i] == 0 ? 1 : 0;
   }
 
   auto shape = std::vector<std::int64_t> {*numberOfParticlesPointer};
@@ -535,7 +585,12 @@ int TorchMLModelDriverImplementation::setDefaultInputs(
   shape.clear();
   shape = {*numberOfParticlesPointer, 3};
 
-  ml_model->SetInputNode(1, coordinates, shape, true, true);
+  if (lengthUnitConversionRequested)
+  {
+    ml_model->SetAndScaleInputNode(
+        1, coordinates, shape, true, true, 1.0 / length_factor);
+  }
+  else { ml_model->SetInputNode(1, coordinates, shape, true, true); }
 
 
   shape.clear();
@@ -584,6 +639,19 @@ int TorchMLModelDriverImplementation::setDescriptorInputs(
     return true;
   }
 #ifdef USE_LIBDESC
+  double * modelCoordinates = coordinates;
+  if (lengthUnitConversionRequested)
+  {
+    auto const coordinateCount
+        = static_cast<std::size_t>(*numberOfParticlesPointer) * 3;
+    positions_buffer.reset(new double[coordinateCount]);
+    for (std::size_t i = 0; i < coordinateCount; i++)
+    {
+      positions_buffer[i] = coordinates[i] / length_factor;
+    }
+    modelCoordinates = positions_buffer.get();
+  }
+
   int neigh_from, n_neigh;
   neigh_from = 0;
   int width = descriptor->width;
@@ -606,13 +674,14 @@ int TorchMLModelDriverImplementation::setDescriptorInputs(
                         particleSpeciesCodes,
                         n_list.data(),
                         n_neigh,
-                        coordinates,
+                        modelCoordinates,
                         descriptor_array.data()
                             + (contributing_particle_ptr * width),
                         descriptor.get());
     contributing_particle_ptr++;
   }
 
+  // TODO: perhaps reuse these scaled coordinates, rather than reallocating at postprocessing
   std::vector<std::int64_t> shape({n_contributing_atoms, width});
   ml_model->SetInputNode(0, descriptor_array.data(), shape, true, true);
   return false;
@@ -756,7 +825,8 @@ int TorchMLModelDriverImplementation::setGraphInputs(
   shape = {numberOfParticlePointers, 3};
 
   if (lengthUnitConversionRequested)
-    ml_model->SetAndScaleInputNode(1, coordinates, shape, true, true, length_factor);
+    ml_model->SetAndScaleInputNode(
+        1, coordinates, shape, true, true, 1.0 / length_factor);
   else
     ml_model->SetInputNode(1, coordinates, shape, true, true);
 
@@ -1498,6 +1568,9 @@ void TorchMLModelDriverImplementation::unitConversion(
       return;
     }
     force_factor = 1.0 / length_factor;
+    // Published distances use requested units; model inputs use the inverse.
+    cutoff_distance *= length_factor;
+    influence_distance *= length_factor;
     lengthUnitConversionRequested = true;
   }
 

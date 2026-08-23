@@ -19,6 +19,7 @@ class TorchExportModel : public MLModel
   std::vector<torch::Tensor> model_inputs_;
   std::unique_ptr<torch::Device> device_;
   torch::Dtype model_precision_ = torch::kFloat64;
+  int grad_idx_ = -1;
 
   template<typename T>
   void SetInputNodeTemplate(int idx,
@@ -45,6 +46,8 @@ class TorchExportModel : public MLModel
       input_tensor = input_tensor.to(*device_);
 
     if (clone || (*device_ == torch::kCPU)) input_tensor = input_tensor.clone();
+
+    if (requires_grad) { grad_idx_ = idx; }
 
     model_inputs_[idx] = input_tensor;
   }

@@ -158,7 +158,31 @@ TorchScriptModel::TorchScriptModel(std::string & model_file_path,
   }
 
   module_.to(*device_);
-  module_.to(model_precision_);
+
+  // module_.to(model_precision_);
+  // There is a bug in TorchScript, where calling
+  // the .to(model_precision_) function on the C++ side results
+  // in the conversion of integer params to floating point too.
+  // On the python side eveything is well and good.
+  // Some models register integer params too, like index of species
+  // in such cases calling .to(model_precision_) results in models
+  // with int -> float. Below is a workaround for that. It explicitly
+  // converts precision of floating point numbers.
+
+  for (auto parameter : module_.parameters())
+  {
+    if (parameter.is_floating_point())
+    {
+      parameter.set_data(parameter.to(model_precision_));
+    }
+  }
+  for (auto buffer : module_.buffers())
+  {
+    if (buffer.is_floating_point())
+    {
+      buffer.set_data(buffer.to(model_precision_));
+    }
+  }
 
   model_inputs_.resize(size_);
 
